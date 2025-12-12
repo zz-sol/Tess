@@ -793,3 +793,37 @@ impl PairingBackend for ArkworksBn254 {
         Ok(ArkBnGt(Bn254::multi_pairing(lhs, rhs)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ark_ec::AffineRepr;
+    use ark_poly::DenseUVPolynomial;
+    use ark_std::UniformRand;
+    use rand::{SeedableRng, rngs::StdRng};
+
+    #[test]
+    fn bn254_kzg_commitment_smoke() {
+        let mut rng = StdRng::from_entropy();
+        let tau = BnFr::rand(&mut rng);
+        let params = BnKzg::setup(8, &tau).expect("setup");
+        let coeffs: Vec<BnFr> = (0..4).map(|_| BnFr::rand(&mut rng)).collect();
+        let poly = DensePolynomial::from_coefficients_vec(coeffs);
+        let commitment = BnKzg::commit_g1(&params, &poly).expect("commit");
+        let affine = commitment.to_affine();
+        let projective = affine.0.into_group();
+        assert!(
+            !projective.is_zero(),
+            "commitment should not be identity for random polynomial"
+        );
+    }
+
+    #[test]
+    fn bn254_pairing_matches_reference() {
+        let g = ArkBnG1::generator();
+        let h = ArkBnG2::generator();
+        let backend_result = ArkworksBn254::pairing(&g, &h);
+        let direct = ArkBnGt(Bn254::pairing(g.to_affine().0, h.to_affine().0));
+        assert_eq!(backend_result.0, direct.0, "pairing mismatch");
+    }
+}
