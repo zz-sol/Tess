@@ -8,10 +8,12 @@ pub mod arkworks_backend;
 pub mod backend;
 pub mod config;
 pub mod errors;
+pub mod lagrange;
 pub mod protocol;
 
 pub use arkworks_backend::*;
 pub use backend::*;
 pub use config::*;
 pub use errors::*;
+pub use lagrange::*;
 pub use protocol::*;
