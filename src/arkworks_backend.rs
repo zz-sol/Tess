@@ -436,7 +436,7 @@ impl MsmProvider<ArkworksBls12> for BlsMsm {
 }
 
 #[cfg(feature = "ark_bls12381")]
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ArkworksBls12;
 
 #[cfg(feature = "ark_bls12381")]
@@ -800,7 +800,7 @@ impl MsmProvider<ArkworksBn254> for BnMsm {
 }
 
 #[cfg(feature = "ark_bn254")]
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ArkworksBn254;
 
 #[cfg(feature = "ark_bn254")]

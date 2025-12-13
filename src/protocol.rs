@@ -1,3 +1,5 @@
+#[cfg(feature = "ark_bls12381")]
+use blake3::Hasher;
 use core::fmt::Debug;
 
 use rand_core::RngCore;
@@ -58,6 +60,7 @@ pub struct Ciphertext<B: PairingBackend> {
     pub proof_g2: Vec<B::G2>,
     pub shared_secret: B::Target,
     pub threshold: usize,
+    pub payload: Vec<u8>,
 }
 
 /// Output of a participant's partial decryption.
@@ -81,6 +84,7 @@ pub struct KeyMaterial<B: PairingBackend> {
 pub struct DecryptionResult<B: PairingBackend> {
     pub shared_secret: B::Target,
     pub opening_proof: Option<Vec<u8>>,
+    pub plaintext: Option<Vec<u8>>,
 }
 
 /// High-level API required by consumers of the scheme.
@@ -123,6 +127,48 @@ pub trait ThresholdScheme<B: PairingBackend>: Debug + Send + Sync + 'static {
         selector: &[bool],
         agg_key: &AggregateKey<B>,
     ) -> Result<DecryptionResult<B>, Error>;
+}
+
+#[cfg(feature = "ark_bls12381")]
+const PAYLOAD_KDF_DOMAIN: &[u8] = b"TESS::threshold::payload";
+
+#[cfg(feature = "ark_bls12381")]
+use crate::backend::TargetGroup;
+
+#[cfg(feature = "ark_bls12381")]
+fn derive_keystream<B: PairingBackend>(secret: &B::Target, len: usize) -> Vec<u8> {
+    if len == 0 {
+        return Vec::new();
+    }
+    let mut hasher = Hasher::new();
+    hasher.update(PAYLOAD_KDF_DOMAIN);
+    let repr = secret.to_repr();
+    hasher.update(repr.as_ref());
+    hasher.update(&(len as u64).to_le_bytes());
+    let mut reader = hasher.finalize_xof();
+    let mut keystream = vec![0u8; len];
+    reader.fill(&mut keystream);
+    keystream
+}
+
+#[cfg(feature = "ark_bls12381")]
+fn xor_with_keystream(data: &[u8], keystream: &[u8]) -> Vec<u8> {
+    data.iter()
+        .zip(keystream.iter())
+        .map(|(byte, key)| byte ^ key)
+        .collect()
+}
+
+#[cfg(feature = "ark_bls12381")]
+fn encrypt_payload<B: PairingBackend>(secret: &B::Target, payload: &[u8]) -> Vec<u8> {
+    let keystream = derive_keystream::<B>(secret, payload.len());
+    xor_with_keystream(payload, &keystream)
+}
+
+#[cfg(feature = "ark_bls12381")]
+fn decrypt_payload<B: PairingBackend>(secret: &B::Target, ciphertext: &[u8]) -> Vec<u8> {
+    let keystream = derive_keystream::<B>(secret, ciphertext.len());
+    xor_with_keystream(ciphertext, &keystream)
 }
 
 #[cfg(feature = "ark_bls12381")]
@@ -297,7 +343,7 @@ pub mod arkworks {
             let mut proof_g2 = Vec::with_capacity(6);
             proof_g2.extend([sa2_0, sa2_1, sa2_2, sa2_3, sa2_4, sa2_5]);
 
-            let _ = payload;
+            let payload_ct = encrypt_payload::<ArkworksBls12>(&shared_secret, payload);
 
             Ok(Ciphertext {
                 gamma_g2,
@@ -305,6 +351,7 @@ pub mod arkworks {
                 proof_g2,
                 shared_secret,
                 threshold,
+                payload: payload_ct,
             })
         }
 
@@ -619,11 +666,20 @@ pub mod arkworks {
         rhs.push(b_g2);
         rhs.push(sigma);
 
-        let enc_key = ArkworksBls12::multi_pairing(&lhs, &rhs).map_err(Error::Backend)?;
+        let shared_secret = ArkworksBls12::multi_pairing(&lhs, &rhs).map_err(Error::Backend)?;
+        let plaintext = if ciphertext.payload.is_empty() {
+            None
+        } else {
+            Some(decrypt_payload::<ArkworksBls12>(
+                &shared_secret,
+                &ciphertext.payload,
+            ))
+        };
 
         Ok(DecryptionResult {
-            shared_secret: enc_key,
+            shared_secret,
             opening_proof: None,
+            plaintext,
         })
     }
 }
@@ -677,6 +733,11 @@ mod tests {
             ct.shared_secret.to_repr(),
             "shared secret mismatch"
         );
+        assert_eq!(
+            result.plaintext.as_deref(),
+            Some(b"payload".as_slice()),
+            "unexpected plaintext"
+        );
     }
 
     #[test]
@@ -709,5 +770,56 @@ mod tests {
             "unexpected result: {:?}",
             result
         );
+    }
+
+    #[test]
+    fn arkworks_decrypt_selector_mismatch() {
+        let mut rng = StdRng::from_entropy();
+        let scheme = SilentThresholdScheme::default();
+        let params = sample_params();
+        let km = scheme.keygen(&mut rng, &params).expect("keygen");
+        let ct = scheme
+            .encrypt(&mut rng, &km.aggregate_key, &params, b"payload")
+            .expect("encrypt");
+
+        let mut selector = vec![false; params.parties];
+        let mut partials = Vec::new();
+        for idx in 0..=params.threshold {
+            selector[idx] = true;
+            let share = scheme
+                .partial_decrypt(&km.secret_keys[idx], &ct)
+                .expect("partial decrypt");
+            partials.push(share);
+        }
+        let mismatched_selector = selector[..selector.len() - 1].to_vec();
+        let err = scheme.aggregate_decrypt(&ct, &partials, &mismatched_selector, &km.aggregate_key);
+        assert!(matches!(err, Err(Error::SelectorMismatch { .. })));
+    }
+
+    #[test]
+    fn arkworks_decrypt_duplicate_partial() {
+        let mut rng = StdRng::from_entropy();
+        let scheme = SilentThresholdScheme::default();
+        let params = sample_params();
+        let km = scheme.keygen(&mut rng, &params).expect("keygen");
+        let ct = scheme
+            .encrypt(&mut rng, &km.aggregate_key, &params, b"payload")
+            .expect("encrypt");
+
+        let mut selector = vec![false; params.parties];
+        let mut partials = Vec::new();
+        for idx in 0..=params.threshold {
+            selector[idx] = true;
+            let share = scheme
+                .partial_decrypt(&km.secret_keys[idx], &ct)
+                .expect("partial decrypt");
+            if idx == 0 {
+                partials.push(share.clone());
+            }
+            partials.push(share);
+        }
+
+        let err = scheme.aggregate_decrypt(&ct, &partials, &selector, &km.aggregate_key);
+        assert!(matches!(err, Err(Error::MalformedInput(_))));
     }
 }
