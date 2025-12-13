@@ -16,12 +16,12 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use rand_core::RngCore;
 use std::fmt::Debug;
 
+use super::sample_field;
 use crate::backend::{
     CurvePoint, EvaluationDomain, FieldElement, MsmProvider, PairingBackend, Polynomial,
     PolynomialCommitment, TargetGroup,
 };
 use crate::errors::BackendError;
-use super::sample_field;
 
 #[cfg(feature = "ark_bls12381")]
 impl FieldElement for BlsFr {

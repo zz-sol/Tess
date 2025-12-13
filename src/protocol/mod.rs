@@ -1,5 +1,3 @@
-#[cfg(feature = "ark_bls12381")]
-use blake3::Hasher;
 use core::fmt::Debug;
 
 use rand_core::RngCore;
@@ -130,49 +128,8 @@ pub trait ThresholdScheme<B: PairingBackend>: Debug + Send + Sync + 'static {
 }
 
 #[cfg(feature = "ark_bls12381")]
-const PAYLOAD_KDF_DOMAIN: &[u8] = b"TESS::threshold::payload";
-
-#[cfg(feature = "ark_bls12381")]
-use crate::backend::TargetGroup;
-
-#[cfg(feature = "ark_bls12381")]
-fn derive_keystream<B: PairingBackend>(secret: &B::Target, len: usize) -> Vec<u8> {
-    if len == 0 {
-        return Vec::new();
-    }
-    let mut hasher = Hasher::new();
-    hasher.update(PAYLOAD_KDF_DOMAIN);
-    let repr = secret.to_repr();
-    hasher.update(repr.as_ref());
-    hasher.update(&(len as u64).to_le_bytes());
-    let mut reader = hasher.finalize_xof();
-    let mut keystream = vec![0u8; len];
-    reader.fill(&mut keystream);
-    keystream
-}
-
-#[cfg(feature = "ark_bls12381")]
-fn xor_with_keystream(data: &[u8], keystream: &[u8]) -> Vec<u8> {
-    data.iter()
-        .zip(keystream.iter())
-        .map(|(byte, key)| byte ^ key)
-        .collect()
-}
-
-#[cfg(feature = "ark_bls12381")]
-fn encrypt_payload<B: PairingBackend>(secret: &B::Target, payload: &[u8]) -> Vec<u8> {
-    let keystream = derive_keystream::<B>(secret, payload.len());
-    xor_with_keystream(payload, &keystream)
-}
-
-#[cfg(feature = "ark_bls12381")]
-fn decrypt_payload<B: PairingBackend>(secret: &B::Target, ciphertext: &[u8]) -> Vec<u8> {
-    let keystream = derive_keystream::<B>(secret, ciphertext.len());
-    xor_with_keystream(ciphertext, &keystream)
-}
-
-#[cfg(feature = "ark_bls12381")]
-pub mod arkworks;
-
-#[cfg(feature = "ark_bls12381")]
-pub use arkworks::*;
+pub mod ark_bls12_381;
+#[cfg(feature = "ark_bn254")]
+pub mod ark_bn254;
+#[cfg(feature = "blst")]
+pub mod blst_bls12_381;

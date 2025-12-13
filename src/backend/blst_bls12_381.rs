@@ -1,6 +1,8 @@
-use blstrs::{Bls12, Compress, G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar};
+use blstrs::{
+    Bls12, Compress, G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar,
+};
 use ff::{Field, PrimeField};
-use group::{prime::PrimeCurveAffine, Curve, Group};
+use group::{Curve, Group, prime::PrimeCurveAffine};
 use pairing::{MillerLoopResult as PairingMillerLoopResult, MultiMillerLoop};
 use rand_core::RngCore;
 use std::io::Cursor;

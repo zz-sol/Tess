@@ -1,17 +1,52 @@
-use super::super::*;
-use ark_bls12_381::Fr as BlsFr;
+use super::*;
+use ::ark_bls12_381::Fr as BlsFr;
 use ark_poly::univariate::DensePolynomial;
 use ark_poly::{DenseUVPolynomial, EvaluationDomain, Radix2EvaluationDomain};
 use rand_core::RngCore;
 
-use crate::arkworks_backend::{ArkG1, ArkG2, ArkworksBls12, BlsKzg, BlsMsm, BlsPowers};
-use crate::backend::{CurvePoint, MsmProvider, TargetGroup};
+use crate::backend::{
+    ArkG1, ArkG2, ArkworksBls12, BlsKzg, BlsMsm, BlsPowers, CurvePoint, MsmProvider, TargetGroup,
+};
 use crate::config::{BackendId, CurveId};
 use crate::errors::{BackendError, Error};
-use crate::lagrange::{interp_mostly_zero, lagrange_polys};
-use ark_ff::{Field, One, Zero};
+use crate::lagrange::ark_bls12_381::{interp_mostly_zero, lagrange_polys};
+use ark_ff::{Field, One, UniformRand, Zero};
 use ark_serialize::CanonicalDeserialize;
-use ark_std::UniformRand;
+use blake3::Hasher;
+
+const PAYLOAD_KDF_DOMAIN: &[u8] = b"TESS::threshold::payload";
+
+fn derive_keystream<B: PairingBackend>(secret: &B::Target, len: usize) -> Vec<u8> {
+    if len == 0 {
+        return Vec::new();
+    }
+    let mut hasher = Hasher::new();
+    hasher.update(PAYLOAD_KDF_DOMAIN);
+    let repr = secret.to_repr();
+    hasher.update(repr.as_ref());
+    hasher.update(&(len as u64).to_le_bytes());
+    let mut reader = hasher.finalize_xof();
+    let mut keystream = vec![0u8; len];
+    reader.fill(&mut keystream);
+    keystream
+}
+
+fn xor_with_keystream(data: &[u8], keystream: &[u8]) -> Vec<u8> {
+    data.iter()
+        .zip(keystream.iter())
+        .map(|(byte, key)| byte ^ key)
+        .collect()
+}
+
+fn encrypt_payload<B: PairingBackend>(secret: &B::Target, payload: &[u8]) -> Vec<u8> {
+    let keystream = derive_keystream::<B>(secret, payload.len());
+    xor_with_keystream(payload, &keystream)
+}
+
+fn decrypt_payload<B: PairingBackend>(secret: &B::Target, ciphertext: &[u8]) -> Vec<u8> {
+    let keystream = derive_keystream::<B>(secret, ciphertext.len());
+    xor_with_keystream(ciphertext, &keystream)
+}
 
 #[derive(Debug, Default)]
 pub struct SilentThresholdScheme;
@@ -52,7 +87,7 @@ impl ThresholdScheme<ArkworksBls12> for SilentThresholdScheme {
         };
         let kzg_params = BlsKzg::setup(parties, &tau).map_err(|err| Error::Backend(err))?;
 
-        let lagranges = lagrange_polys::<BlsFr>(parties).map_err(Error::Backend)?;
+        let lagranges = lagrange_polys(parties).map_err(Error::Backend)?;
         let domain = Radix2EvaluationDomain::new(parties)
             .ok_or_else(|| Error::Backend(BackendError::Math("invalid evaluation domain")))?;
 
@@ -328,10 +363,7 @@ fn aggregate_public_key(
     })
 }
 
-fn divide_by_linear(
-    poly: &DensePolynomial<BlsFr>,
-    root: BlsFr,
-) -> (DensePolynomial<BlsFr>, BlsFr) {
+fn divide_by_linear(poly: &DensePolynomial<BlsFr>, root: BlsFr) -> (DensePolynomial<BlsFr>, BlsFr) {
     assert!(poly.coeffs.len() > 1, "cannot divide constant polynomial");
     let mut quotient = vec![BlsFr::zero(); poly.coeffs.len() - 1];
     let mut carry = *poly.coeffs.last().unwrap();
@@ -417,8 +449,7 @@ fn aggregate_decrypt(
     let mut bhat_coeffs = vec![BlsFr::zero(); ciphertext.threshold + 1];
     bhat_coeffs.extend_from_slice(&b.coeffs);
     let bhat = DensePolynomial::from_coefficients_vec(bhat_coeffs);
-    let bhat_g1 =
-        BlsKzg::commit_g1(&agg_key.commitment_params, &bhat).map_err(Error::Backend)?;
+    let bhat_g1 = BlsKzg::commit_g1(&agg_key.commitment_params, &bhat).map_err(Error::Backend)?;
 
     let n_inv = BlsFr::from(n as u64)
         .inverse()
@@ -615,8 +646,7 @@ mod tests {
             partials.push(share);
         }
         let mismatched_selector = selector[..selector.len() - 1].to_vec();
-        let err =
-            scheme.aggregate_decrypt(&ct, &partials, &mismatched_selector, &km.aggregate_key);
+        let err = scheme.aggregate_decrypt(&ct, &partials, &mismatched_selector, &km.aggregate_key);
         assert!(matches!(err, Err(Error::SelectorMismatch { .. })));
     }
 
