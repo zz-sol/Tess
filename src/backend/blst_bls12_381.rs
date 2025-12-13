@@ -485,10 +485,8 @@ impl PairingBackend for BlstBackend {
         let mut g2_affine = vec![G2Affine::identity(); rhs_proj.len()];
         G1Projective::batch_normalize(&lhs_proj, &mut g1_affine);
         G2Projective::batch_normalize(&rhs_proj, &mut g2_affine);
-        let g2_prepared: Vec<G2Prepared> = g2_affine
-            .iter()
-            .map(|aff| G2Prepared::from(*aff))
-            .collect();
+        let g2_prepared: Vec<G2Prepared> =
+            g2_affine.iter().map(|aff| G2Prepared::from(*aff)).collect();
         let terms: Vec<_> = g1_affine.iter().zip(g2_prepared.iter()).collect();
         let result = Bls12::multi_miller_loop(&terms).final_exponentiation();
         Ok(BlstGt(result))
