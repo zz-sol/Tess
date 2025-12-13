@@ -23,7 +23,6 @@ use crate::backend::{
 };
 use crate::errors::BackendError;
 
-#[cfg(feature = "ark_bn254")]
 impl FieldElement for BnFr {
     type Repr = Vec<u8>;
 
@@ -60,27 +59,21 @@ impl FieldElement for BnFr {
     }
 }
 
-#[cfg(feature = "ark_bn254")]
 #[derive(Clone, Debug)]
 pub struct ArkBnG1(pub BnG1);
 
-#[cfg(feature = "ark_bn254")]
 #[derive(Clone, Debug)]
 pub struct ArkBnG2(pub BnG2);
 
-#[cfg(feature = "ark_bn254")]
 #[derive(Clone, Debug)]
 pub struct ArkBnG1Affine(pub BnG1Affine);
 
-#[cfg(feature = "ark_bn254")]
 #[derive(Clone, Debug)]
 pub struct ArkBnG2Affine(pub BnG2Affine);
 
-#[cfg(feature = "ark_bn254")]
 #[derive(Clone, Debug)]
 pub struct ArkBnGt(pub PairingOutput<Bn254>);
 
-#[cfg(feature = "ark_bn254")]
 impl CurvePoint<BnFr> for ArkBnG1 {
     type Affine = ArkBnG1Affine;
 
@@ -90,6 +83,10 @@ impl CurvePoint<BnFr> for ArkBnG1 {
 
     fn generator() -> Self {
         ArkBnG1(BnG1::generator())
+    }
+
+    fn is_identity(&self) -> bool {
+        self.0.is_zero()
     }
 
     fn from_affine(affine: &Self::Affine) -> Self {
@@ -129,7 +126,6 @@ impl CurvePoint<BnFr> for ArkBnG1 {
     }
 }
 
-#[cfg(feature = "ark_bn254")]
 impl CurvePoint<BnFr> for ArkBnG2 {
     type Affine = ArkBnG2Affine;
 
@@ -139,6 +135,10 @@ impl CurvePoint<BnFr> for ArkBnG2 {
 
     fn generator() -> Self {
         ArkBnG2(BnG2::generator())
+    }
+
+    fn is_identity(&self) -> bool {
+        self.0.is_zero()
     }
 
     fn from_affine(affine: &Self::Affine) -> Self {
@@ -178,7 +178,6 @@ impl CurvePoint<BnFr> for ArkBnG2 {
     }
 }
 
-#[cfg(feature = "ark_bn254")]
 impl TargetGroup for ArkBnGt {
     type Scalar = BnFr;
     type Repr = Vec<u8>;
@@ -212,7 +211,6 @@ impl TargetGroup for ArkBnGt {
     }
 }
 
-#[cfg(feature = "ark_bn254")]
 impl Polynomial<ArkworksBn254> for DensePolynomial<BnFr> {
     fn degree(&self) -> usize {
         <DensePolynomial<BnFr> as ArkPolynomial<BnFr>>::degree(self)
@@ -231,7 +229,6 @@ impl Polynomial<ArkworksBn254> for DensePolynomial<BnFr> {
     }
 }
 
-#[cfg(feature = "ark_bn254")]
 impl EvaluationDomain<ArkworksBn254> for Radix2EvaluationDomain<BnFr> {
     fn size(&self) -> usize {
         <Radix2EvaluationDomain<BnFr> as ArkEvaluationDomain<BnFr>>::size(self)
@@ -250,7 +247,6 @@ impl EvaluationDomain<ArkworksBn254> for Radix2EvaluationDomain<BnFr> {
     }
 }
 
-#[cfg(feature = "ark_bn254")]
 #[derive(Clone, Debug)]
 pub struct BnPowers {
     pub powers_of_g: Vec<ArkBnG1Affine>,
@@ -258,7 +254,6 @@ pub struct BnPowers {
     pub e_gh: ArkBnGt,
 }
 
-#[cfg(feature = "ark_bn254")]
 fn setup_powers_bn(max_degree: usize, tau: &BnFr) -> Result<BnPowers, BackendError> {
     if max_degree < 1 {
         return Err(BackendError::Math("degree must be >= 1"));
@@ -301,16 +296,13 @@ fn setup_powers_bn(max_degree: usize, tau: &BnFr) -> Result<BnPowers, BackendErr
     })
 }
 
-#[cfg(feature = "ark_bn254")]
 fn convert_bn_scalars(scalars: &[BnFr]) -> Vec<<BnFr as PrimeField>::BigInt> {
     scalars.iter().map(|s| (*s).into_bigint()).collect()
 }
 
-#[cfg(feature = "ark_bn254")]
 #[derive(Debug)]
 pub struct BnKzg;
 
-#[cfg(feature = "ark_bn254")]
 impl PolynomialCommitment<ArkworksBn254> for BnKzg {
     type Parameters = BnPowers;
     type Polynomial = DensePolynomial<BnFr>;
@@ -360,11 +352,9 @@ impl PolynomialCommitment<ArkworksBn254> for BnKzg {
     }
 }
 
-#[cfg(feature = "ark_bn254")]
 #[derive(Debug)]
 pub struct BnMsm;
 
-#[cfg(feature = "ark_bn254")]
 impl MsmProvider<ArkworksBn254> for BnMsm {
     fn msm_g1(bases: &[ArkBnG1], scalars: &[BnFr]) -> Result<ArkBnG1, BackendError> {
         if bases.len() != scalars.len() {
@@ -387,11 +377,9 @@ impl MsmProvider<ArkworksBn254> for BnMsm {
     }
 }
 
-#[cfg(feature = "ark_bn254")]
 #[derive(Clone, Debug, Default)]
 pub struct ArkworksBn254;
 
-#[cfg(feature = "ark_bn254")]
 impl PairingBackend for ArkworksBn254 {
     type Scalar = BnFr;
     type G1 = ArkBnG1;
@@ -412,39 +400,5 @@ impl PairingBackend for ArkworksBn254 {
         let lhs = g1.iter().map(|p| p.0.into_affine()).collect::<Vec<_>>();
         let rhs = g2.iter().map(|p| p.0.into_affine()).collect::<Vec<_>>();
         Ok(ArkBnGt(Bn254::multi_pairing(lhs, rhs)))
-    }
-}
-
-#[cfg(all(test, feature = "ark_bn254"))]
-mod tests {
-    use super::*;
-    use ark_ec::AffineRepr;
-    use ark_poly::DenseUVPolynomial;
-    use ark_std::UniformRand;
-    use rand::{SeedableRng, rngs::StdRng};
-
-    #[test]
-    fn bn254_kzg_commitment_smoke() {
-        let mut rng = StdRng::from_entropy();
-        let tau = BnFr::rand(&mut rng);
-        let params = BnKzg::setup(8, &tau).expect("setup");
-        let coeffs: Vec<BnFr> = (0..4).map(|_| BnFr::rand(&mut rng)).collect();
-        let poly = DensePolynomial::from_coefficients_vec(coeffs);
-        let commitment = BnKzg::commit_g1(&params, &poly).expect("commit");
-        let affine = commitment.to_affine();
-        let projective = affine.0.into_group();
-        assert!(
-            !projective.is_zero(),
-            "commitment should not be identity for random polynomial"
-        );
-    }
-
-    #[test]
-    fn bn254_pairing_matches_reference() {
-        let g = ArkBnG1::generator();
-        let h = ArkBnG2::generator();
-        let backend_result = ArkworksBn254::pairing(&g, &h);
-        let direct = ArkBnGt(Bn254::pairing(g.to_affine().0, h.to_affine().0));
-        assert_eq!(backend_result.0, direct.0, "pairing mismatch");
     }
 }

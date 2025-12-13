@@ -26,6 +26,9 @@ pub trait LagrangeField:
 
     /// Generator of the 2^TWO_ADICITY subgroup.
     fn two_adic_root_of_unity() -> Self;
+
+    /// Performs in-place batch inversion for the provided values.
+    fn batch_inversion(values: &mut [Self]) -> Result<(), BackendError>;
 }
 
 fn ensure_domain_size<F: LagrangeField>(n: usize) -> Result<(), BackendError> {
@@ -48,28 +51,6 @@ fn generator_for_size<F: LagrangeField>(n: usize) -> Result<F, BackendError> {
     let mut exp = [0u64; 4];
     exp[0] = 1u64 << shift;
     Ok(F::two_adic_root_of_unity().pow(&exp))
-}
-
-fn batch_inversion<F: LagrangeField>(values: &mut [F]) -> Result<(), BackendError> {
-    if values.is_empty() {
-        return Ok(());
-    }
-    let mut prefix = vec![F::one(); values.len()];
-    let mut acc = F::one();
-    for (idx, value) in values.iter().enumerate() {
-        prefix[idx] = acc.clone();
-        acc *= value.clone();
-    }
-    let inv = acc
-        .invert()
-        .ok_or(BackendError::Math("batch inversion failed"))?;
-    let mut suffix = inv;
-    for (value, pref) in values.iter_mut().zip(prefix.into_iter()).rev() {
-        let tmp = value.clone();
-        *value = pref * suffix.clone();
-        suffix *= tmp;
-    }
-    Ok(())
 }
 
 pub(super) fn lagrange_poly_impl<F, P, PF>(
@@ -121,7 +102,7 @@ where
             denom
         })
         .collect();
-    batch_inversion(&mut denominators)?;
+    F::batch_inversion(&mut denominators)?;
 
     let mut polys = Vec::with_capacity(n);
     for (omega_i_inv, denom_inv) in omega_inv_pows.iter().zip(denominators.iter()) {

@@ -1,18 +1,21 @@
 use blstrs::Scalar;
-use ff::PrimeField;
+use ff::{BatchInvert, PrimeField};
 
 use crate::backend::DensePolynomial;
 use crate::errors::BackendError;
 
-use super::{
-    interp_mostly_zero_impl, lagrange_poly_impl, lagrange_polys_impl, LagrangeField,
-};
+use super::{LagrangeField, interp_mostly_zero_impl, lagrange_poly_impl, lagrange_polys_impl};
 
 impl LagrangeField for Scalar {
     const TWO_ADICITY: u32 = Scalar::S;
 
     fn two_adic_root_of_unity() -> Self {
         Scalar::ROOT_OF_UNITY
+    }
+
+    fn batch_inversion(values: &mut [Self]) -> Result<(), BackendError> {
+        values.iter_mut().batch_invert();
+        Ok(())
     }
 }
 

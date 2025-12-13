@@ -27,6 +27,7 @@ pub trait CurvePoint<F: FieldElement>: Clone + Send + Sync + Debug + 'static {
 
     fn identity() -> Self;
     fn generator() -> Self;
+    fn is_identity(&self) -> bool;
     fn from_affine(affine: &Self::Affine) -> Self;
     fn to_affine(&self) -> Self::Affine;
     fn add(&self, other: &Self) -> Self;
@@ -121,3 +122,56 @@ pub use ark_bls12_381::*;
 pub use ark_bn254::*;
 #[cfg(feature = "blst")]
 pub use blst_bls12_381::*;
+
+#[cfg(test)]
+mod tests {
+
+    use rand::{SeedableRng, rngs::StdRng};
+
+    use super::{CurvePoint, FieldElement, PairingBackend, PolynomialCommitment};
+    #[cfg(feature = "ark_bls12381")]
+    use crate::backend::ArkworksBls12;
+    #[cfg(feature = "ark_bn254")]
+    use crate::backend::ArkworksBn254;
+    #[cfg(feature = "blst")]
+    use crate::backend::{BlstBackend, DensePolynomial as BlstDensePolynomial};
+    #[cfg(feature = "ark_bls12381")]
+    use ark_bls12_381::Fr as BlsFr;
+    #[cfg(feature = "ark_bn254")]
+    use ark_bn254::Fr as BnFr;
+    #[cfg(any(feature = "ark_bls12381", feature = "ark_bn254"))]
+    use ark_poly::univariate::DensePolynomial as ArkDensePolynomial;
+
+    type CommitmentPolynomial<E> =
+        <<E as PairingBackend>::PolynomialCommitment as PolynomialCommitment<E>>::Polynomial;
+
+    fn kzg_commitment_helper<E, F>(make_poly: F)
+    where
+        E: PairingBackend,
+        F: Fn(Vec<E::Scalar>) -> CommitmentPolynomial<E>,
+    {
+        let mut rng = StdRng::from_entropy();
+        let tau = E::Scalar::random(&mut rng);
+        let params = E::PolynomialCommitment::setup(8, &tau).expect("setup");
+        let coeffs: Vec<E::Scalar> = (0..4).map(|_| E::Scalar::random(&mut rng)).collect();
+        let poly = make_poly(coeffs);
+        let commitment = E::PolynomialCommitment::commit_g1(&params, &poly).expect("commit");
+        assert!(
+            !commitment.is_identity(),
+            "commitment should not be identity for random polynomial"
+        );
+    }
+    #[test]
+    fn kzg_commitment() {
+        #[cfg(feature = "blst")]
+        kzg_commitment_helper::<BlstBackend, _>(BlstDensePolynomial::from_coefficients_vec);
+        #[cfg(feature = "ark_bls12381")]
+        kzg_commitment_helper::<ArkworksBls12, _>(
+            ArkDensePolynomial::<BlsFr>::from_coefficients_vec,
+        );
+        #[cfg(feature = "ark_bn254")]
+        kzg_commitment_helper::<ArkworksBn254, _>(
+            ArkDensePolynomial::<BnFr>::from_coefficients_vec,
+        );
+    }
+}

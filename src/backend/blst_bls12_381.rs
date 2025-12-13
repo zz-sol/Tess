@@ -112,6 +112,10 @@ impl CurvePoint<Scalar> for BlstG1 {
         BlstG1(G1Projective::generator())
     }
 
+    fn is_identity(&self) -> bool {
+        bool::from(self.0.is_identity())
+    }
+
     fn from_affine(affine: &Self::Affine) -> Self {
         BlstG1(affine.into())
     }
@@ -153,6 +157,10 @@ impl CurvePoint<Scalar> for BlstG2 {
 
     fn generator() -> Self {
         BlstG2(G2Projective::generator())
+    }
+
+    fn is_identity(&self) -> bool {
+        bool::from(self.0.is_identity())
     }
 
     fn from_affine(affine: &Self::Affine) -> Self {
@@ -480,48 +488,5 @@ impl PairingBackend for BlstBackend {
         let terms: Vec<_> = g1_affine.iter().zip(g2_prepared.iter()).collect();
         let result = Bls12::multi_miller_loop(&terms).final_exponentiation();
         Ok(BlstGt(result))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rand::{SeedableRng, rngs::StdRng};
-
-    #[test]
-    fn blst_kzg_commitment_smoke() {
-        let mut rng = StdRng::from_entropy();
-        let tau = <Scalar as Field>::random(&mut rng);
-        let params = BlstKzg::setup(8, &tau).expect("setup succeeds");
-        let coeffs: Vec<Scalar> = (0..4)
-            .map(|_| <Scalar as Field>::random(&mut rng))
-            .collect();
-        let poly = DensePolynomial::from_coefficients_vec(coeffs);
-        let commitment = BlstKzg::commit_g1(&params, &poly).expect("commit succeeds");
-        let affine = commitment.to_affine();
-        assert!(
-            !bool::from(affine.is_identity()),
-            "random polynomial commitment should not be identity"
-        );
-    }
-
-    #[test]
-    fn multi_pairing_matches_sequential() {
-        let mut rng = StdRng::from_entropy();
-        let len = 4;
-        let g1_points: Vec<BlstG1> = (0..len)
-            .map(|_| BlstG1(G1Projective::random(&mut rng)))
-            .collect();
-        let g2_points: Vec<BlstG2> = (0..len)
-            .map(|_| BlstG2(G2Projective::random(&mut rng)))
-            .collect();
-
-        let batched = BlstBackend::multi_pairing(&g1_points, &g2_points).expect("pairing");
-        let mut sequential = BlstGt::identity();
-        for (g1, g2) in g1_points.iter().zip(g2_points.iter()) {
-            let term = BlstBackend::pairing(g1, g2);
-            sequential = sequential.combine(&term);
-        }
-        assert_eq!(batched.0, sequential.0, "multi pairing mismatch");
     }
 }

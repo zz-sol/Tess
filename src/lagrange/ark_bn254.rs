@@ -1,18 +1,21 @@
 use ark_bn254::Fr as BnFr;
-use ark_ff::FftField;
+use ark_ff::{FftField, batch_inversion};
 use ark_poly::univariate::DensePolynomial;
 
 use crate::errors::BackendError;
 
-use super::{
-    interp_mostly_zero_impl, lagrange_poly_impl, lagrange_polys_impl, LagrangeField,
-};
+use super::{LagrangeField, interp_mostly_zero_impl, lagrange_poly_impl, lagrange_polys_impl};
 
 impl LagrangeField for BnFr {
     const TWO_ADICITY: u32 = <BnFr as FftField>::TWO_ADICITY;
 
     fn two_adic_root_of_unity() -> Self {
         <BnFr as FftField>::TWO_ADIC_ROOT_OF_UNITY
+    }
+
+    fn batch_inversion(values: &mut [Self]) -> Result<(), BackendError> {
+        batch_inversion(values);
+        Ok(())
     }
 }
 

@@ -23,7 +23,6 @@ use crate::backend::{
 };
 use crate::errors::BackendError;
 
-#[cfg(feature = "ark_bls12381")]
 impl FieldElement for BlsFr {
     type Repr = Vec<u8>;
 
@@ -60,27 +59,21 @@ impl FieldElement for BlsFr {
     }
 }
 
-#[cfg(feature = "ark_bls12381")]
 #[derive(Clone, Debug)]
 pub struct ArkG1(pub RawG1);
 
-#[cfg(feature = "ark_bls12381")]
 #[derive(Clone, Debug)]
 pub struct ArkG2(pub RawG2);
 
-#[cfg(feature = "ark_bls12381")]
 #[derive(Clone, Debug)]
 pub struct ArkG1Affine(pub RawG1Affine);
 
-#[cfg(feature = "ark_bls12381")]
 #[derive(Clone, Debug)]
 pub struct ArkG2Affine(pub RawG2Affine);
 
-#[cfg(feature = "ark_bls12381")]
 #[derive(Clone, Debug)]
 pub struct ArkGt(pub PairingOutput<Bls12_381>);
 
-#[cfg(feature = "ark_bls12381")]
 impl CurvePoint<BlsFr> for ArkG1 {
     type Affine = ArkG1Affine;
 
@@ -90,6 +83,10 @@ impl CurvePoint<BlsFr> for ArkG1 {
 
     fn generator() -> Self {
         ArkG1(RawG1::generator())
+    }
+
+    fn is_identity(&self) -> bool {
+        self.0.is_zero()
     }
 
     fn from_affine(affine: &Self::Affine) -> Self {
@@ -129,7 +126,6 @@ impl CurvePoint<BlsFr> for ArkG1 {
     }
 }
 
-#[cfg(feature = "ark_bls12381")]
 impl CurvePoint<BlsFr> for ArkG2 {
     type Affine = ArkG2Affine;
 
@@ -139,6 +135,10 @@ impl CurvePoint<BlsFr> for ArkG2 {
 
     fn generator() -> Self {
         ArkG2(RawG2::generator())
+    }
+
+    fn is_identity(&self) -> bool {
+        self.0.is_zero()
     }
 
     fn from_affine(affine: &Self::Affine) -> Self {
@@ -178,7 +178,6 @@ impl CurvePoint<BlsFr> for ArkG2 {
     }
 }
 
-#[cfg(feature = "ark_bls12381")]
 impl TargetGroup for ArkGt {
     type Scalar = BlsFr;
     type Repr = Vec<u8>;
@@ -212,7 +211,6 @@ impl TargetGroup for ArkGt {
     }
 }
 
-#[cfg(feature = "ark_bls12381")]
 impl Polynomial<ArkworksBls12> for DensePolynomial<BlsFr> {
     fn degree(&self) -> usize {
         <DensePolynomial<BlsFr> as ArkPolynomial<BlsFr>>::degree(self)
@@ -231,7 +229,6 @@ impl Polynomial<ArkworksBls12> for DensePolynomial<BlsFr> {
     }
 }
 
-#[cfg(feature = "ark_bls12381")]
 impl EvaluationDomain<ArkworksBls12> for Radix2EvaluationDomain<BlsFr> {
     fn size(&self) -> usize {
         <Radix2EvaluationDomain<BlsFr> as ArkEvaluationDomain<BlsFr>>::size(self)
@@ -250,7 +247,6 @@ impl EvaluationDomain<ArkworksBls12> for Radix2EvaluationDomain<BlsFr> {
     }
 }
 
-#[cfg(feature = "ark_bls12381")]
 #[derive(Clone, Debug)]
 pub struct BlsPowers {
     pub powers_of_g: Vec<ArkG1Affine>,
@@ -258,7 +254,6 @@ pub struct BlsPowers {
     pub e_gh: ArkGt,
 }
 
-#[cfg(feature = "ark_bls12381")]
 fn setup_powers_bls(max_degree: usize, tau: &BlsFr) -> Result<BlsPowers, BackendError> {
     if max_degree < 1 {
         return Err(BackendError::Math("degree must be >= 1"));
@@ -301,16 +296,13 @@ fn setup_powers_bls(max_degree: usize, tau: &BlsFr) -> Result<BlsPowers, Backend
     })
 }
 
-#[cfg(feature = "ark_bls12381")]
 fn convert_scalars(scalars: &[BlsFr]) -> Vec<<BlsFr as PrimeField>::BigInt> {
     scalars.iter().map(|s| (*s).into_bigint()).collect()
 }
 
-#[cfg(feature = "ark_bls12381")]
 #[derive(Debug)]
 pub struct BlsKzg;
 
-#[cfg(feature = "ark_bls12381")]
 impl PolynomialCommitment<ArkworksBls12> for BlsKzg {
     type Parameters = BlsPowers;
     type Polynomial = DensePolynomial<BlsFr>;
@@ -360,11 +352,9 @@ impl PolynomialCommitment<ArkworksBls12> for BlsKzg {
     }
 }
 
-#[cfg(feature = "ark_bls12381")]
 #[derive(Debug)]
 pub struct BlsMsm;
 
-#[cfg(feature = "ark_bls12381")]
 impl MsmProvider<ArkworksBls12> for BlsMsm {
     fn msm_g1(bases: &[ArkG1], scalars: &[BlsFr]) -> Result<ArkG1, BackendError> {
         if bases.len() != scalars.len() {
@@ -387,11 +377,9 @@ impl MsmProvider<ArkworksBls12> for BlsMsm {
     }
 }
 
-#[cfg(feature = "ark_bls12381")]
 #[derive(Clone, Debug, Default)]
 pub struct ArkworksBls12;
 
-#[cfg(feature = "ark_bls12381")]
 impl PairingBackend for ArkworksBls12 {
     type Scalar = BlsFr;
     type G1 = ArkG1;
