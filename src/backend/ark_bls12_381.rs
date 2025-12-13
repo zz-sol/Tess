@@ -101,19 +101,19 @@ impl CurvePoint<BlsFr> for ArkG1 {
     }
 
     fn add(&self, other: &Self) -> Self {
-        let mut tmp = self.0.clone();
-        tmp += other.0.clone();
+        let mut tmp = self.0;
+        tmp += other.0;
         ArkG1(tmp)
     }
 
     fn sub(&self, other: &Self) -> Self {
-        let mut tmp = self.0.clone();
-        tmp -= other.0.clone();
+        let mut tmp = self.0;
+        tmp -= other.0;
         ArkG1(tmp)
     }
 
     fn negate(&self) -> Self {
-        ArkG1(-self.0.clone())
+        ArkG1(-self.0)
     }
 
     fn mul_scalar(&self, scalar: &BlsFr) -> Self {
@@ -121,7 +121,7 @@ impl CurvePoint<BlsFr> for ArkG1 {
     }
 
     fn batch_normalize(points: &[Self]) -> Vec<Self::Affine> {
-        let projectives: Vec<RawG1> = points.iter().map(|p| p.0.clone()).collect();
+        let projectives: Vec<RawG1> = points.iter().map(|p| p.0).collect();
         RawG1::normalize_batch(&projectives)
             .into_iter()
             .map(ArkG1Affine)
@@ -150,19 +150,19 @@ impl CurvePoint<BlsFr> for ArkG2 {
     }
 
     fn add(&self, other: &Self) -> Self {
-        let mut tmp = self.0.clone();
-        tmp += other.0.clone();
+        let mut tmp = self.0;
+        tmp += other.0;
         ArkG2(tmp)
     }
 
     fn sub(&self, other: &Self) -> Self {
-        let mut tmp = self.0.clone();
-        tmp -= other.0.clone();
+        let mut tmp = self.0;
+        tmp -= other.0;
         ArkG2(tmp)
     }
 
     fn negate(&self) -> Self {
-        ArkG2(-self.0.clone())
+        ArkG2(-self.0)
     }
 
     fn mul_scalar(&self, scalar: &BlsFr) -> Self {
@@ -170,7 +170,7 @@ impl CurvePoint<BlsFr> for ArkG2 {
     }
 
     fn batch_normalize(points: &[Self]) -> Vec<Self::Affine> {
-        let projectives: Vec<RawG2> = points.iter().map(|p| p.0.clone()).collect();
+        let projectives: Vec<RawG2> = points.iter().map(|p| p.0).collect();
         RawG2::normalize_batch(&projectives)
             .into_iter()
             .map(ArkG2Affine)
@@ -192,7 +192,7 @@ impl TargetGroup for ArkGt {
     }
 
     fn combine(&self, other: &Self) -> Self {
-        let mut tmp = self.0.clone();
+        let mut tmp = self.0;
         tmp += &other.0;
         ArkGt(tmp)
     }
@@ -268,7 +268,7 @@ fn setup_powers_bls(max_degree: usize, tau: &BlsFr) -> Result<BlsPowers, Backend
     let h = RawG2::generator();
 
     let mut powers_of_tau = vec![<BlsFr as One>::one()];
-    let mut cur = tau.clone();
+    let mut cur = *tau;
     for _ in 0..max_degree {
         powers_of_tau.push(cur);
         cur *= tau;
@@ -333,7 +333,7 @@ impl PolynomialCommitment<ArkworksBls12> for BlsKzg {
             .powers_of_g
             .iter()
             .take(degree + 1)
-            .map(|p| p.0.clone())
+            .map(|p| p.0)
             .collect();
 
         Ok(ArkG1(RawG1::msm_bigint(&bases, &scalars)))
@@ -353,7 +353,7 @@ impl PolynomialCommitment<ArkworksBls12> for BlsKzg {
             .powers_of_h
             .iter()
             .take(degree + 1)
-            .map(|p| p.0.clone())
+            .map(|p| p.0)
             .collect();
 
         Ok(ArkG2(RawG2::msm_bigint(&bases, &scalars)))
@@ -370,7 +370,7 @@ impl MsmProvider<ArkworksBls12> for BlsMsm {
         if bases.len() != scalars.len() {
             return Err(BackendError::Math("msm length mismatch"));
         }
-        let projectives: Vec<RawG1> = bases.iter().map(|p| p.0.clone()).collect();
+        let projectives: Vec<RawG1> = bases.iter().map(|p| p.0).collect();
         let affines = RawG1::normalize_batch(&projectives);
         let coeffs = convert_scalars(scalars);
         Ok(ArkG1(RawG1::msm_bigint(&affines, &coeffs)))
@@ -380,7 +380,7 @@ impl MsmProvider<ArkworksBls12> for BlsMsm {
         if bases.len() != scalars.len() {
             return Err(BackendError::Math("msm length mismatch"));
         }
-        let projectives: Vec<RawG2> = bases.iter().map(|p| p.0.clone()).collect();
+        let projectives: Vec<RawG2> = bases.iter().map(|p| p.0).collect();
         let affines = RawG2::normalize_batch(&projectives);
         let coeffs = convert_scalars(scalars);
         Ok(ArkG2(RawG2::msm_bigint(&affines, &coeffs)))
@@ -402,10 +402,7 @@ impl PairingBackend for ArkworksBls12 {
     type Msm = BlsMsm;
 
     fn pairing(g1: &Self::G1, g2: &Self::G2) -> Self::Target {
-        ArkGt(Bls12_381::pairing(
-            g1.0.clone().into_affine(),
-            g2.0.clone().into_affine(),
-        ))
+        ArkGt(Bls12_381::pairing(g1.0.into_affine(), g2.0.into_affine()))
     }
 
     fn multi_pairing(g1: &[Self::G1], g2: &[Self::G2]) -> Result<Self::Target, BackendError> {
@@ -414,11 +411,11 @@ impl PairingBackend for ArkworksBls12 {
         }
         let lhs = g1
             .iter()
-            .map(|p| p.0.clone().into_affine())
+            .map(|p| p.0.into_affine())
             .collect::<Vec<_>>();
         let rhs = g2
             .iter()
-            .map(|p| p.0.clone().into_affine())
+            .map(|p| p.0.into_affine())
             .collect::<Vec<_>>();
         Ok(ArkGt(Bls12_381::multi_pairing(lhs, rhs)))
     }

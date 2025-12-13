@@ -628,7 +628,7 @@ mod tests {
     #[test]
     fn blst_encrypt_decrypt_roundtrip() {
         let mut rng = StdRng::from_entropy();
-        let scheme = SilentThresholdBlst::default();
+        let scheme = SilentThresholdBlst;
         let params = sample_params();
         let km = scheme.keygen(&mut rng, &params).expect("keygen");
         let ct = scheme
@@ -637,8 +637,8 @@ mod tests {
 
         let mut selector = vec![false; params.parties];
         let mut partials = Vec::new();
-        for idx in 0..=params.threshold {
-            selector[idx] = true;
+        for (idx, selected) in selector.iter_mut().enumerate().take(params.threshold + 1) {
+            *selected = true;
             let share = scheme
                 .partial_decrypt(&km.secret_keys[idx], &ct)
                 .expect("partial decrypt");
@@ -664,7 +664,7 @@ mod tests {
     #[test]
     fn blst_decrypt_not_enough_shares() {
         let mut rng = StdRng::from_entropy();
-        let scheme = SilentThresholdBlst::default();
+        let scheme = SilentThresholdBlst;
         let params = sample_params();
         let km = scheme.keygen(&mut rng, &params).expect("keygen");
         let ct = scheme
@@ -673,8 +673,8 @@ mod tests {
 
         let mut selector = vec![false; params.parties];
         let mut partials = Vec::new();
-        for idx in 0..params.threshold {
-            selector[idx] = true;
+        for (idx, selected) in selector.iter_mut().enumerate().take(params.threshold) {
+            *selected = true;
             let share = scheme
                 .partial_decrypt(&km.secret_keys[idx], &ct)
                 .expect("partial decrypt");
@@ -696,7 +696,7 @@ mod tests {
     #[test]
     fn blst_decrypt_selector_mismatch() {
         let mut rng = StdRng::from_entropy();
-        let scheme = SilentThresholdBlst::default();
+        let scheme = SilentThresholdBlst;
         let params = sample_params();
         let km = scheme.keygen(&mut rng, &params).expect("keygen");
         let ct = scheme
@@ -705,8 +705,8 @@ mod tests {
 
         let mut selector = vec![false; params.parties];
         let mut partials = Vec::new();
-        for idx in 0..=params.threshold {
-            selector[idx] = true;
+        for (idx, selected) in selector.iter_mut().enumerate().take(params.threshold + 1) {
+            *selected = true;
             let share = scheme
                 .partial_decrypt(&km.secret_keys[idx], &ct)
                 .expect("partial decrypt");
@@ -720,7 +720,7 @@ mod tests {
     #[test]
     fn blst_decrypt_duplicate_partial() {
         let mut rng = StdRng::from_entropy();
-        let scheme = SilentThresholdBlst::default();
+        let scheme = SilentThresholdBlst;
         let params = sample_params();
         let km = scheme.keygen(&mut rng, &params).expect("keygen");
         let ct = scheme
@@ -729,8 +729,8 @@ mod tests {
 
         let mut selector = vec![false; params.parties];
         let mut partials = Vec::new();
-        for idx in 0..=params.threshold {
-            selector[idx] = true;
+        for (idx, selected) in selector.iter_mut().enumerate().take(params.threshold + 1) {
+            *selected = true;
             let share = scheme
                 .partial_decrypt(&km.secret_keys[idx], &ct)
                 .expect("partial decrypt");
