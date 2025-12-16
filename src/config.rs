@@ -195,8 +195,6 @@ pub struct ThresholdParameters {
     pub parties: usize,
     /// Threshold number of participants needed to decrypt
     pub threshold: usize,
-    /// Reserved: chunk size for batch processing
-    pub chunk_size: usize,
     /// Backend and curve configuration
     pub backend: BackendConfig,
 }
@@ -234,7 +232,6 @@ impl ThresholdParameters {
         let params = Self {
             parties,
             threshold,
-            chunk_size: parties, // Default to parties for now
             backend,
         };
         params.validate()?;

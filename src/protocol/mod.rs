@@ -586,7 +586,7 @@ where
     B: ProtocolBackend,
     BackendScalar<B>: ProtocolScalar,
 {
-    #[instrument(level = "info", skip(rng, params))]
+    #[instrument(level = "info", skip(self, rng, params))]
     fn srs_gen<R: RngCore + ?Sized>(
         &self,
         rng: &mut R,
@@ -644,7 +644,7 @@ where
         })
     }
 
-    #[instrument(level = "info", skip(self, params, public_keys, commitment_params))]
+    #[instrument(level = "info", skip(self, params, public_keys, commitment_params), fields(num_partials = public_keys.len()))]
     fn aggregate_public_key(
         &self,
         params: &ThresholdParameters,
@@ -707,6 +707,8 @@ where
         let s3 = <B::Scalar as FieldElement>::random(rng);
         let s4 = <B::Scalar as FieldElement>::random(rng);
 
+        // for three scalar mul, the generic MSM is actually slower.
+        // todo: use three-scalar-base-mul if we want to accelerate further. c.f. ed25519-heea
         let sa1_0 = agg_key
             .ask
             .mul_scalar(&s0)
@@ -714,6 +716,8 @@ where
             .add(&g.mul_scalar(&s4));
         let sa1_1 = g.mul_scalar(&s2);
 
+        // for two scalar mul, the generic MSM is actually slower.
+        // todo: use double-scalar-base-mul if we want to accelerate further. c.f. ed25519-dalek
         let sa2_0 = h.mul_scalar(&s0).add(&gamma_g2.mul_scalar(&s2));
         let sa2_1 = agg_key.z_g2.mul_scalar(&s0);
         let sa2_2 = h_tau.mul_scalar(&(s0.clone() + s1.clone()));
@@ -918,6 +922,7 @@ where
     )
 }
 
+#[instrument(level = "debug", skip_all, fields(domain_size))]
 fn precompute_lagrange_powers<B: ProtocolBackend>(
     lagranges: &[CommitmentPolynomial<B>],
     domain_size: usize,
@@ -1078,6 +1083,7 @@ where
     })
 }
 
+#[instrument(level = "trace", skip_all, fields(participant_id))]
 fn derive_public_key_from_powers<B: ProtocolBackend>(
     participant_id: usize,
     sk: &SecretKey<B>,
@@ -1122,6 +1128,7 @@ where
     })
 }
 
+#[instrument(level = "info", skip_all, fields(parties, num_keys = public_keys.len()))]
 fn aggregate_public_key<B: ProtocolBackend>(
     public_keys: &[PublicKey<B>],
     params: &CommitmentParams<B>,
@@ -1157,7 +1164,9 @@ where
     let g2_tau_n = h_powers
         .get(parties)
         .ok_or(Error::Backend(BackendError::Math("missing h^tau^n")))?;
-    let z_g2 = B::G2::from_affine(g2_tau_n).sub(&B::G2::generator());
+    let z_g2 = g2_tau_n - B::G2::generator().to_affine();
+
+    // B::G2::from_affine(g2_tau_n).sub(&B::G2::generator());
 
     Ok(AggregateKey {
         public_keys: public_keys.to_vec(),
@@ -1169,6 +1178,7 @@ where
     })
 }
 
+#[instrument(level = "debug", skip_all, fields(num_partials = partials.len(), threshold = ciphertext.threshold))]
 fn aggregate_decrypt<B: ProtocolBackend>(
     ciphertext: &Ciphertext<B>,
     partials: &[PartialDecryption<B>],
@@ -1376,7 +1386,6 @@ mod tests {
         ThresholdParameters {
             parties: 8,
             threshold: 4,
-            chunk_size: 32,
             backend,
         }
     }

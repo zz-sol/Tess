@@ -1,8 +1,7 @@
 use rand::{SeedableRng, rngs::StdRng};
-use std::time::Instant;
 use tess::{TargetGroup, ThresholdScheme};
 use tracing::{info, instrument};
-use tracing_subscriber::fmt::init as init_tracing;
+use tracing_subscriber::fmt;
 
 use tess::{
     config::{BackendConfig, BackendId, CurveId, ThresholdParameters},
@@ -33,29 +32,15 @@ where
     let params = ThresholdParameters {
         parties: PARTIES,
         threshold: THRESHOLD,
-        chunk_size: 32,
         backend: backend_config,
     };
 
     let srs = scheme.srs_gen(&mut rng, &params)?;
 
-    info!("starting benchmark");
-    let key_material = {
-        // let _span = tracing::info_span!("keygen").entered();
-        let start = Instant::now();
-        let km = scheme.keygen(&mut rng, &params, &srs)?;
-        info!(duration = ?start.elapsed(), "key generation finished");
-        km
-    };
+    let key_material = scheme.keygen(&mut rng, &params, &srs)?;
 
-    let message = vec![0u8; params.chunk_size];
-    let ciphertext = {
-        // let _span = tracing::info_span!("encrypt").entered();
-        let start = Instant::now();
-        let ct = scheme.encrypt(&mut rng, &key_material.aggregate_key, &params, &message)?;
-        info!(duration = ?start.elapsed(), "encryption finished");
-        ct
-    };
+    let message = vec![0u8; 32];
+    let ciphertext = scheme.encrypt(&mut rng, &key_material.aggregate_key, &params, &message)?;
 
     let mut selector = vec![false; PARTIES];
 
@@ -63,29 +48,22 @@ where
     let mut partials = Vec::with_capacity(THRESHOLD + 1);
     for idx in 0..=THRESHOLD {
         selector[idx] = true;
-        // let _guard = trace_span!("partial_decrypt", idx).entered();
         let partial = scheme.partial_decrypt(&key_material.secret_keys[idx], &ciphertext)?;
         partials.push(partial);
     }
 
-    let result = {
-        // let _span = tracing::info_span!("aggregate_decrypt").entered();
-        let start = Instant::now();
-        let res = scheme.aggregate_decrypt(
-            &ciphertext,
-            &partials,
-            &selector,
-            &key_material.aggregate_key,
-        )?;
-        info!(duration = ?start.elapsed(), "aggregate decryption finished");
-        res
-    };
+    let result = scheme.aggregate_decrypt(
+        &ciphertext,
+        &partials,
+        &selector,
+        &key_material.aggregate_key,
+    )?;
 
-    println!(
+    info!(
         "shared secrets equal: {}",
         ciphertext.shared_secret.to_repr().as_ref() == result.shared_secret.to_repr().as_ref()
     );
-    println!(
+    info!(
         "Recovered plaintext matches: {} (len = {})",
         result.plaintext.as_deref() == Some(message.as_slice()),
         result
@@ -99,7 +77,13 @@ where
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    init_tracing();
+    // Set to DEBUG to see one more level of detail, or TRACE for maximum detail
+    fmt()
+        .with_max_level(tracing::Level::INFO)
+        .with_span_events(fmt::format::FmtSpan::ENTER | fmt::format::FmtSpan::CLOSE)
+        .with_target(false)
+        .init();
+
     let mut executed = 0;
 
     #[cfg(feature = "blst")]

@@ -362,7 +362,7 @@ impl MsmProvider<ArkworksBls12> for BlsMsm {
             return Err(BackendError::Math("msm length mismatch"));
         }
         let projectives: Vec<RawG1> = bases.iter().map(|p| p.0).collect();
-        let affines = RawG1::normalize_batch(&projectives);
+        // let affines = RawG1::normalize_batch(&projectives);
         let coeffs = convert_scalars(scalars);
         Ok(ArkG1(RawG1::msm_bigint(&affines, &coeffs)))
     }
@@ -372,7 +372,7 @@ impl MsmProvider<ArkworksBls12> for BlsMsm {
             return Err(BackendError::Math("msm length mismatch"));
         }
         let projectives: Vec<RawG2> = bases.iter().map(|p| p.0).collect();
-        let affines = RawG2::normalize_batch(&projectives);
+        // let affines = RawG2::normalize_batch(&projectives);
         let coeffs = convert_scalars(scalars);
         Ok(ArkG2(RawG2::msm_bigint(&affines, &coeffs)))
     }
