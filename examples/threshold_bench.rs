@@ -1,4 +1,4 @@
-use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom};
+use rand::{SeedableRng, rngs::StdRng};
 use std::time::Instant;
 use tess::{TargetGroup, ThresholdScheme};
 use tracing::{info, instrument, trace_span};
@@ -60,10 +60,10 @@ where
     };
 
     let mut selector = vec![false; PARTIES];
-    let chosen = vec![0, 3, 27, 35];
 
-    let mut partials = Vec::with_capacity(chosen.len());
-    for idx in chosen {
+    // Select threshold + 1 parties for decryption
+    let mut partials = Vec::with_capacity(THRESHOLD + 1);
+    for idx in 0..=THRESHOLD {
         selector[idx] = true;
         let _guard = trace_span!("partial_decrypt", idx).entered();
         let partial = scheme.partial_decrypt(&key_material.secret_keys[idx], &ciphertext)?;
