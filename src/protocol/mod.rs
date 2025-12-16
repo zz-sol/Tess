@@ -6,6 +6,9 @@ use core::{
 
 use blake3::Hasher;
 use rand_core::RngCore;
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 use tracing::{instrument, trace};
 
 use crate::{
@@ -99,6 +102,22 @@ impl<B: PairingBackend> Clone for PartialDecryption<B> {
     }
 }
 
+/// Precomputed Lagrange polynomial commitments for fast key derivation.
+#[derive(Clone, Debug)]
+pub struct LagrangePowers<B: PairingBackend> {
+    pub li: Vec<B::G1>,
+    pub li_minus0: Vec<B::G1>,
+    pub li_x: Vec<B::G1>,
+    pub li_lj_z: Vec<Vec<B::G1>>,
+}
+
+/// Structured Reference String (SRS) containing KZG parameters and precomputed Lagrange powers.
+#[derive(Clone, Debug)]
+pub struct SRS<B: PairingBackend> {
+    pub commitment_params: CommitmentParams<B>,
+    pub lagrange_powers: LagrangePowers<B>,
+}
+
 /// Bundle returned by key generation.
 #[derive(Clone, Debug)]
 pub struct KeyMaterial<B: PairingBackend> {
@@ -119,18 +138,19 @@ pub struct DecryptionResult<B: PairingBackend> {
 /// High-level API required by consumers of the scheme.
 pub trait ThresholdScheme<B: ProtocolBackend>: Debug + Send + Sync + 'static {
     /// Generates the structured reference string (SRS) or powers of tau required by the backend.
+    /// This includes KZG commitment parameters and precomputed Lagrange powers.
     fn srs_gen<R: RngCore + ?Sized>(
         &self,
         rng: &mut R,
         params: &ThresholdParameters,
-    ) -> Result<(CommitmentParams<B>, Vec<u8>), Error>;
+    ) -> Result<(SRS<B>, Vec<u8>), Error>;
 
     /// Generates key material for all parties using the selected backend and precomputed SRS.
     fn keygen<R: RngCore + ?Sized>(
         &self,
         rng: &mut R,
         params: &ThresholdParameters,
-        commitment_params: &CommitmentParams<B>,
+        srs: &SRS<B>,
     ) -> Result<KeyMaterial<B>, Error>;
 
     /// Recomputes the aggregated key from a slice of public keys (e.g. when members are rotated).
@@ -234,12 +254,12 @@ where
     B: ProtocolBackend,
     BackendScalar<B>: ProtocolScalar,
 {
-    #[instrument(level = "debug", skip(self, rng, params))]
+    #[instrument(level = "info", skip(self, rng, params))]
     fn srs_gen<R: RngCore + ?Sized>(
         &self,
         rng: &mut R,
         params: &ThresholdParameters,
-    ) -> Result<(CommitmentParams<B>, Vec<u8>), Error> {
+    ) -> Result<(SRS<B>, Vec<u8>), Error> {
         params.validate()?;
         Self::ensure_backend(params)?;
         let parties = params.parties;
@@ -248,47 +268,55 @@ where
         } else {
             B::sample_tau(rng)
         };
-        let kzg_params = B::PolynomialCommitment::setup(parties, &tau).map_err(Error::Backend)?;
+        let commitment_params =
+            B::PolynomialCommitment::setup(parties, &tau).map_err(Error::Backend)?;
+
+        // Precompute Lagrange polynomials and their powers
+        let lagranges = B::lagrange_polynomials(parties).map_err(Error::Backend)?;
+        let lagrange_powers =
+            precompute_lagrange_powers::<B>(&lagranges, parties, &tau, &commitment_params)
+                .map_err(Error::Backend)?;
+
+        let srs = SRS {
+            commitment_params,
+            lagrange_powers,
+        };
+
         let tau_bytes = tau.to_repr().as_ref().to_vec();
-        Ok((kzg_params, tau_bytes))
+        Ok((srs, tau_bytes))
     }
 
-    #[instrument(level = "debug", skip(self, rng, params, commitment_params))]
+    #[instrument(level = "info", skip(self, rng, params, srs))]
     fn keygen<R: RngCore + ?Sized>(
         &self,
         rng: &mut R,
         params: &ThresholdParameters,
-        commitment_params: &CommitmentParams<B>,
+        srs: &SRS<B>,
     ) -> Result<KeyMaterial<B>, Error> {
         params.validate()?;
         Self::ensure_backend(params)?;
         let parties = params.parties;
-        let lagranges = B::lagrange_polynomials(parties).map_err(Error::Backend)?;
         B::domain_new(parties).map_err(Error::Backend)?;
         let secret_keys = Self::generate_secret_keys(rng, parties);
+
         let public_keys = secret_keys
-            .iter()
+            .par_iter()
             .map(|sk| {
-                derive_public_key::<B>(
-                    sk.participant_id,
-                    sk,
-                    &lagranges,
-                    parties,
-                    commitment_params,
-                )
+                derive_public_key_from_powers::<B>(sk.participant_id, sk, &srs.lagrange_powers)
             })
             .collect::<Result<Vec<_>, BackendError>>()
             .map_err(Error::Backend)?;
-        let aggregate_key = aggregate_public_key::<B>(&public_keys, commitment_params, parties)?;
+        let aggregate_key =
+            aggregate_public_key::<B>(&public_keys, &srs.commitment_params, parties)?;
         Ok(KeyMaterial {
             secret_keys,
             public_keys,
             aggregate_key,
-            kzg_params: commitment_params.clone(),
+            kzg_params: srs.commitment_params.clone(),
         })
     }
 
-    #[instrument(level = "trace", skip(self, params, public_keys, commitment_params))]
+    #[instrument(level = "info", skip(self, params, public_keys, commitment_params))]
     fn aggregate_public_key(
         &self,
         params: &ThresholdParameters,
@@ -300,7 +328,7 @@ where
         aggregate_public_key::<B>(public_keys, commitment_params, params.parties)
     }
 
-    #[instrument(level = "debug", skip(self, rng, agg_key, params, payload))]
+    #[instrument(level = "info", skip(self, rng, agg_key, params, payload))]
     fn encrypt<R: RngCore + ?Sized>(
         &self,
         rng: &mut R,
@@ -395,7 +423,7 @@ where
     }
 
     #[instrument(
-        level = "debug",
+        level = "info",
         skip(self, ciphertext, partials, selector, agg_key),
         fields(num_partials = partials.len())
     )]
@@ -460,6 +488,7 @@ where
     (B::polynomial_from_coeffs(quotient), carry)
 }
 
+#[allow(dead_code)]
 fn scale_poly<B: ProtocolBackend>(
     poly: &CommitmentPolynomial<B>,
     scalar: &B::Scalar,
@@ -475,6 +504,7 @@ where
     B::polynomial_from_coeffs(coeffs)
 }
 
+#[allow(dead_code)]
 fn sub_poly<B: ProtocolBackend>(
     a: &CommitmentPolynomial<B>,
     b: &CommitmentPolynomial<B>,
@@ -493,6 +523,7 @@ where
     B::polynomial_from_coeffs(coeffs)
 }
 
+#[allow(dead_code)]
 fn mul_poly<B: ProtocolBackend>(
     a: &CommitmentPolynomial<B>,
     b: &CommitmentPolynomial<B>,
@@ -518,6 +549,7 @@ where
     B::polynomial_from_coeffs(coeffs)
 }
 
+#[allow(dead_code)]
 fn divide_by_vanishing<B: ProtocolBackend>(
     poly: &CommitmentPolynomial<B>,
     domain_size: usize,
@@ -558,6 +590,100 @@ where
     )
 }
 
+fn precompute_lagrange_powers<B: ProtocolBackend>(
+    lagranges: &[CommitmentPolynomial<B>],
+    domain_size: usize,
+    tau: &B::Scalar,
+    _params: &CommitmentParams<B>,
+) -> Result<LagrangePowers<B>, BackendError>
+where
+    BackendScalar<B>: ProtocolScalar,
+{
+    let n = lagranges.len();
+
+    // Evaluate all Lagrange polynomials at tau
+    let li_evals: Vec<B::Scalar> = lagranges
+        .iter()
+        .map(|li_poly| li_poly.evaluate(tau))
+        .collect();
+
+    // Compute tau^n - 1 (the vanishing polynomial evaluated at tau)
+    let tau_n = tau.pow(&[domain_size as u64, 0, 0, 0]);
+    let z_eval = tau_n - <B::Scalar as FieldElement>::one();
+    let z_eval_inv = z_eval
+        .invert()
+        .ok_or(BackendError::Math("vanishing polynomial at tau is zero"))?;
+
+    let tau_inv = tau
+        .invert()
+        .ok_or(BackendError::Math("tau must be non-zero"))?;
+
+    // Compute li, li_minus0, and li_x in parallel
+    let results: Vec<(B::G1, B::G1, B::G1)> = lagranges
+        .par_iter()
+        .enumerate()
+        .map(|(i, li_poly)| {
+            let li_eval = &li_evals[i];
+
+            // li = g * L_i(tau)
+            let lagrange_li = B::G1::generator().mul_scalar(li_eval);
+
+            // li_minus0 = g * (L_i(tau) - L_i(0))
+            let li_0 = li_poly
+                .coeffs()
+                .first()
+                .cloned()
+                .unwrap_or_else(|| <B::Scalar as FieldElement>::zero());
+            let li_minus0_eval = li_eval.clone() - li_0;
+            let lagrange_li_minus0 = B::G1::generator().mul_scalar(&li_minus0_eval);
+
+            // li_x = g * (L_i(tau) - L_i(0)) / tau
+            let li_x_eval = li_minus0_eval * tau_inv.clone();
+            let lagrange_li_x = B::G1::generator().mul_scalar(&li_x_eval);
+
+            Ok((lagrange_li, lagrange_li_minus0, lagrange_li_x))
+        })
+        .collect::<Result<Vec<_>, BackendError>>()?;
+
+    let mut li = Vec::with_capacity(n);
+    let mut li_minus0 = Vec::with_capacity(n);
+    let mut li_x = Vec::with_capacity(n);
+    for (a, b, c) in results {
+        li.push(a);
+        li_minus0.push(b);
+        li_x.push(c);
+    }
+
+    // Compute li_lj_z using the evaluation-based approach
+    let li_lj_z: Vec<Vec<B::G1>> = (0..n)
+        .into_par_iter()
+        .map(|i| {
+            (0..n)
+                .into_par_iter()
+                .map(|j| {
+                    let scalar = if i == j {
+                        // (L_i(tau)^2 - L_i(tau)) / z(tau)
+                        let li_eval: &B::Scalar = &li_evals[i];
+                        (li_eval.clone() * li_eval.clone() - li_eval.clone()) * z_eval_inv.clone()
+                    } else {
+                        // (L_i(tau) * L_j(tau)) / z(tau)
+                        (li_evals[i].clone() * li_evals[j].clone()) * z_eval_inv.clone()
+                    };
+                    Ok(B::G1::generator().mul_scalar(&scalar))
+                })
+                .collect::<Result<Vec<_>, BackendError>>()
+        })
+        .collect::<Result<Vec<_>, BackendError>>()?;
+
+    Ok(LagrangePowers {
+        li,
+        li_minus0,
+        li_x,
+        li_lj_z,
+    })
+}
+
+#[allow(dead_code)]
 fn derive_public_key<B: ProtocolBackend>(
     participant_id: usize,
     sk: &SecretKey<B>,
@@ -613,6 +739,50 @@ where
         let commitment = B::PolynomialCommitment::commit_g1(params, &scaled)?;
         lagrange_li_lj_z.push(commitment);
     }
+
+    Ok(PublicKey {
+        participant_id,
+        bls_key: B::G1::generator().mul_scalar(&sk.scalar),
+        lagrange_li,
+        lagrange_li_minus0,
+        lagrange_li_x,
+        lagrange_li_lj_z,
+    })
+}
+
+fn derive_public_key_from_powers<B: ProtocolBackend>(
+    participant_id: usize,
+    sk: &SecretKey<B>,
+    powers: &LagrangePowers<B>,
+) -> Result<PublicKey<B>, BackendError>
+where
+    BackendScalar<B>: ProtocolScalar,
+{
+    let lagrange_li = powers
+        .li
+        .get(participant_id)
+        .ok_or(BackendError::Math("missing lagrange power"))?
+        .mul_scalar(&sk.scalar);
+
+    let lagrange_li_minus0 = powers
+        .li_minus0
+        .get(participant_id)
+        .ok_or(BackendError::Math("missing lagrange power minus0"))?
+        .mul_scalar(&sk.scalar);
+
+    let lagrange_li_x = powers
+        .li_x
+        .get(participant_id)
+        .ok_or(BackendError::Math("missing lagrange power x"))?
+        .mul_scalar(&sk.scalar);
+
+    let lagrange_li_lj_z = powers
+        .li_lj_z
+        .get(participant_id)
+        .ok_or(BackendError::Math("missing lagrange powers li_lj_z"))?
+        .iter()
+        .map(|val| val.mul_scalar(&sk.scalar))
+        .collect();
 
     Ok(PublicKey {
         participant_id,
@@ -894,11 +1064,9 @@ mod tests {
         let mut rng = StdRng::from_entropy();
         let scheme = SilentThreshold::<B>::default();
         let mut params = sample_params(backend);
-        let (kzg_params, tau_bytes) = scheme.srs_gen(&mut rng, &params).expect("srs gen");
+        let (srs, tau_bytes) = scheme.srs_gen(&mut rng, &params).expect("srs gen");
         params.kzg_tau = Some(tau_bytes);
-        let km = scheme
-            .keygen(&mut rng, &params, &kzg_params)
-            .expect("keygen");
+        let km = scheme.keygen(&mut rng, &params, &srs).expect("keygen");
         let ct = scheme
             .encrypt(&mut rng, &km.aggregate_key, &params, b"payload")
             .expect("encrypt");
@@ -937,11 +1105,9 @@ mod tests {
         let mut rng = StdRng::from_entropy();
         let scheme = SilentThreshold::<B>::default();
         let mut params = sample_params(backend);
-        let (kzg_params, tau_bytes) = scheme.srs_gen(&mut rng, &params).expect("srs gen");
+        let (srs, tau_bytes) = scheme.srs_gen(&mut rng, &params).expect("srs gen");
         params.kzg_tau = Some(tau_bytes);
-        let km = scheme
-            .keygen(&mut rng, &params, &kzg_params)
-            .expect("keygen");
+        let km = scheme.keygen(&mut rng, &params, &srs).expect("keygen");
         let ct = scheme
             .encrypt(&mut rng, &km.aggregate_key, &params, b"payload")
             .expect("encrypt");
@@ -976,10 +1142,10 @@ mod tests {
         let mut rng = StdRng::from_entropy();
         let scheme = SilentThreshold::<B>::default();
         let mut params = sample_params(backend);
-        let (kzg_params, tau_bytes) = scheme.srs_gen(&mut rng, &params).expect("srs gen");
+        let (srs, tau_bytes) = scheme.srs_gen(&mut rng, &params).expect("srs gen");
         params.kzg_tau = Some(tau_bytes);
         let km = scheme
-            .keygen(&mut rng, &params, &kzg_params)
+            .keygen(&mut rng, &params, &srs)
             .expect("keygen");
         let ct = scheme
             .encrypt(&mut rng, &km.aggregate_key, &params, b"payload")
@@ -1008,10 +1174,10 @@ mod tests {
         let mut rng = StdRng::from_entropy();
         let scheme = SilentThreshold::<B>::default();
         let mut params = sample_params(backend);
-        let (kzg_params, tau_bytes) = scheme.srs_gen(&mut rng, &params).expect("srs gen");
+        let (srs, tau_bytes) = scheme.srs_gen(&mut rng, &params).expect("srs gen");
         params.kzg_tau = Some(tau_bytes);
         let km = scheme
-            .keygen(&mut rng, &params, &kzg_params)
+            .keygen(&mut rng, &params, &srs)
             .expect("keygen");
         let ct = scheme
             .encrypt(&mut rng, &km.aggregate_key, &params, b"payload")

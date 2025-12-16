@@ -16,8 +16,8 @@ use tess::ArkworksBn254;
 #[cfg(feature = "blst")]
 use tess::BlstBackend;
 
-const PARTIES: usize = 1 << 6; // 16
-const THRESHOLD: usize = 3;
+const PARTIES: usize = 1 << 11; // 16
+const THRESHOLD: usize = 1400;
 
 #[instrument(level = "info", skip(backend_config), fields(backend = %backend_name))]
 fn run_threshold_example<B>(
@@ -38,14 +38,14 @@ where
         kzg_tau: None,
     };
 
-    let (kzg_params, tau_bytes) = scheme.srs_gen(&mut rng, &params)?;
+    let (srs, tau_bytes) = scheme.srs_gen(&mut rng, &params)?;
     params.kzg_tau = Some(tau_bytes);
 
     info!("starting benchmark");
     let key_material = {
         let _span = tracing::info_span!("keygen").entered();
         let start = Instant::now();
-        let km = scheme.keygen(&mut rng, &params, &kzg_params)?;
+        let km = scheme.keygen(&mut rng, &params, &srs)?;
         info!(duration = ?start.elapsed(), "key generation finished");
         km
     };
