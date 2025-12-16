@@ -1,7 +1,7 @@
 use rand::{SeedableRng, rngs::StdRng};
 use std::time::Instant;
 use tess::{TargetGroup, ThresholdScheme};
-use tracing::{info, instrument, trace_span};
+use tracing::{info, instrument};
 use tracing_subscriber::fmt::init as init_tracing;
 
 use tess::{
@@ -19,7 +19,7 @@ use tess::BlstBackend;
 const PARTIES: usize = 1 << 11; // 16
 const THRESHOLD: usize = 1400;
 
-#[instrument(level = "info", skip(backend_config), fields(backend = %backend_name))]
+#[instrument(level = "info", skip(backend_config, backend_name), fields(backend = %backend_name))]
 fn run_threshold_example<B>(
     backend_name: &str,
     backend_config: BackendConfig,
@@ -30,20 +30,18 @@ where
 {
     let mut rng = StdRng::seed_from_u64(42);
     let scheme = SilentThreshold::<B>::default();
-    let mut params = ThresholdParameters {
+    let params = ThresholdParameters {
         parties: PARTIES,
         threshold: THRESHOLD,
         chunk_size: 32,
         backend: backend_config,
-        kzg_tau: None,
     };
 
-    let (srs, tau_bytes) = scheme.srs_gen(&mut rng, &params)?;
-    params.kzg_tau = Some(tau_bytes);
+    let srs = scheme.srs_gen(&mut rng, &params)?;
 
     info!("starting benchmark");
     let key_material = {
-        let _span = tracing::info_span!("keygen").entered();
+        // let _span = tracing::info_span!("keygen").entered();
         let start = Instant::now();
         let km = scheme.keygen(&mut rng, &params, &srs)?;
         info!(duration = ?start.elapsed(), "key generation finished");
@@ -52,7 +50,7 @@ where
 
     let message = vec![0u8; params.chunk_size];
     let ciphertext = {
-        let _span = tracing::info_span!("encrypt").entered();
+        // let _span = tracing::info_span!("encrypt").entered();
         let start = Instant::now();
         let ct = scheme.encrypt(&mut rng, &key_material.aggregate_key, &params, &message)?;
         info!(duration = ?start.elapsed(), "encryption finished");
@@ -65,13 +63,13 @@ where
     let mut partials = Vec::with_capacity(THRESHOLD + 1);
     for idx in 0..=THRESHOLD {
         selector[idx] = true;
-        let _guard = trace_span!("partial_decrypt", idx).entered();
+        // let _guard = trace_span!("partial_decrypt", idx).entered();
         let partial = scheme.partial_decrypt(&key_material.secret_keys[idx], &ciphertext)?;
         partials.push(partial);
     }
 
     let result = {
-        let _span = tracing::info_span!("aggregate_decrypt").entered();
+        // let _span = tracing::info_span!("aggregate_decrypt").entered();
         let start = Instant::now();
         let res = scheme.aggregate_decrypt(
             &ciphertext,

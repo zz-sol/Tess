@@ -199,7 +199,7 @@ pub trait CurvePoint<F: FieldElement>: Clone + Send + Sync + Debug + 'static {
 /// ```rust,no_run
 /// # #[cfg(feature = "blst")]
 /// # {
-/// use tess::backend::{BlstBackend, PairingBackend, CurvePoint};
+/// use tess::backend::{BlstBackend, PairingBackend, CurvePoint, TargetGroup};
 ///
 /// type G1 = <BlstBackend as PairingBackend>::G1;
 /// type G2 = <BlstBackend as PairingBackend>::G2;

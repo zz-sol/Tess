@@ -371,9 +371,7 @@ pub trait ThresholdScheme<B: ProtocolBackend>: Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// A tuple containing:
     /// - `SRS<B>`: The structured reference string with commitment parameters
-    /// - `Vec<u8>`: The serialized tau value (must be securely discarded!)
     ///
     /// # Security
     ///
@@ -384,7 +382,7 @@ pub trait ThresholdScheme<B: ProtocolBackend>: Debug + Send + Sync + 'static {
         &self,
         rng: &mut R,
         params: &ThresholdParameters,
-    ) -> Result<(SRS<B>, Vec<u8>), Error>;
+    ) -> Result<SRS<B>, Error>;
 
     /// Generates key material for all participants.
     ///
@@ -588,20 +586,17 @@ where
     B: ProtocolBackend,
     BackendScalar<B>: ProtocolScalar,
 {
-    #[instrument(level = "info", skip(self, rng, params))]
+    #[instrument(level = "info", skip(rng, params))]
     fn srs_gen<R: RngCore + ?Sized>(
         &self,
         rng: &mut R,
         params: &ThresholdParameters,
-    ) -> Result<(SRS<B>, Vec<u8>), Error> {
+    ) -> Result<SRS<B>, Error> {
         params.validate()?;
         Self::ensure_backend(params)?;
         let parties = params.parties;
-        let tau = if let Some(bytes) = params.kzg_tau.as_ref() {
-            B::parse_tau(bytes)?
-        } else {
-            B::sample_tau(rng)
-        };
+        let tau = B::sample_tau(rng);
+
         let commitment_params =
             B::PolynomialCommitment::setup(parties, &tau).map_err(Error::Backend)?;
 
@@ -616,8 +611,7 @@ where
             lagrange_powers,
         };
 
-        let tau_bytes = tau.to_repr().as_ref().to_vec();
-        Ok((srs, tau_bytes))
+        Ok(srs)
     }
 
     #[instrument(level = "info", skip(self, rng, params, srs))]
@@ -1384,7 +1378,6 @@ mod tests {
             threshold: 4,
             chunk_size: 32,
             backend,
-            kzg_tau: None,
         }
     }
 
@@ -1395,9 +1388,9 @@ mod tests {
     {
         let mut rng = StdRng::from_entropy();
         let scheme = SilentThreshold::<B>::default();
-        let mut params = sample_params(backend);
-        let (srs, tau_bytes) = scheme.srs_gen(&mut rng, &params).expect("srs gen");
-        params.kzg_tau = Some(tau_bytes);
+        let params = sample_params(backend);
+        let srs = scheme.srs_gen(&mut rng, &params).expect("srs gen");
+
         let km = scheme.keygen(&mut rng, &params, &srs).expect("keygen");
         let ct = scheme
             .encrypt(&mut rng, &km.aggregate_key, &params, b"payload")
@@ -1436,9 +1429,8 @@ mod tests {
     {
         let mut rng = StdRng::from_entropy();
         let scheme = SilentThreshold::<B>::default();
-        let mut params = sample_params(backend);
-        let (srs, tau_bytes) = scheme.srs_gen(&mut rng, &params).expect("srs gen");
-        params.kzg_tau = Some(tau_bytes);
+        let params = sample_params(backend);
+        let srs = scheme.srs_gen(&mut rng, &params).expect("srs gen");
         let km = scheme.keygen(&mut rng, &params, &srs).expect("keygen");
         let ct = scheme
             .encrypt(&mut rng, &km.aggregate_key, &params, b"payload")
@@ -1473,9 +1465,8 @@ mod tests {
     {
         let mut rng = StdRng::from_entropy();
         let scheme = SilentThreshold::<B>::default();
-        let mut params = sample_params(backend);
-        let (srs, tau_bytes) = scheme.srs_gen(&mut rng, &params).expect("srs gen");
-        params.kzg_tau = Some(tau_bytes);
+        let params = sample_params(backend);
+        let srs = scheme.srs_gen(&mut rng, &params).expect("srs gen");
         let km = scheme.keygen(&mut rng, &params, &srs).expect("keygen");
         let ct = scheme
             .encrypt(&mut rng, &km.aggregate_key, &params, b"payload")
@@ -1503,9 +1494,8 @@ mod tests {
     {
         let mut rng = StdRng::from_entropy();
         let scheme = SilentThreshold::<B>::default();
-        let mut params = sample_params(backend);
-        let (srs, tau_bytes) = scheme.srs_gen(&mut rng, &params).expect("srs gen");
-        params.kzg_tau = Some(tau_bytes);
+        let params = sample_params(backend);
+        let srs = scheme.srs_gen(&mut rng, &params).expect("srs gen");
         let km = scheme.keygen(&mut rng, &params, &srs).expect("keygen");
         let ct = scheme
             .encrypt(&mut rng, &km.aggregate_key, &params, b"payload")

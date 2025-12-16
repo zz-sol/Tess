@@ -38,6 +38,10 @@
 //! use tess::protocol::{SilentThreshold, ThresholdScheme};
 //! # #[cfg(feature = "blst")]
 //! use tess::backend::BlstBackend;
+//! # #[cfg(feature = "blst")]
+//! use rand::rngs::StdRng;
+//! # #[cfg(feature = "blst")]
+//! use rand::SeedableRng;
 //!
 //! # #[cfg(feature = "blst")]
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -48,45 +52,39 @@
 //!     None,
 //! )?;
 //!
+//! // Create RNG and scheme instance
+//! let mut rng = StdRng::from_entropy();
+//! let scheme = SilentThreshold::<BlstBackend>::default();
+//!
 //! // Generate Structured Reference String (one-time trusted setup)
-//! let (srs, tau) = SilentThreshold::<BlstBackend>::srs_gen(&params)?;
+//! let (srs, tau) = scheme.srs_gen(&mut rng, &params)?;
 //!
-//! // Generate keys for each participant
-//! let mut key_materials = Vec::new();
-//! for party_id in 0..params.parties {
-//!     let km = SilentThreshold::<BlstBackend>::keygen(party_id, &params, &srs)?;
-//!     key_materials.push(km);
-//! }
-//!
-//! // Aggregate public keys
-//! let public_keys: Vec<_> = key_materials.iter()
-//!     .map(|km| km.public_key.clone())
-//!     .collect();
-//! let aggregate_key = SilentThreshold::<BlstBackend>::aggregate_public_key(
-//!     &public_keys, &params, &srs,
-//! )?;
+//! // Generate key material for all participants
+//! let key_material = scheme.keygen(&mut rng, &params, &srs)?;
 //!
 //! // Encrypt a message
 //! let plaintext = b"Secret message";
-//! let ciphertext = SilentThreshold::<BlstBackend>::encrypt(
-//!     plaintext, &aggregate_key, &params,
+//! let ciphertext = scheme.encrypt(
+//!     &mut rng, &key_material.aggregate_key, &params, plaintext,
 //! )?;
 //!
 //! // Partial decryptions from threshold participants (e.g., first 3 parties)
+//! let mut selector = vec![false; params.parties];
 //! let mut partial_decryptions = Vec::new();
-//! for i in 0..3 {
-//!     let partial = SilentThreshold::<BlstBackend>::partial_decrypt(
-//!         &key_materials[i].secret_key, &ciphertext, &params,
+//! for i in 0..params.threshold {
+//!     selector[i] = true;
+//!     let partial = scheme.partial_decrypt(
+//!         &key_material.secret_keys[i], &ciphertext,
 //!     )?;
 //!     partial_decryptions.push(partial);
 //! }
 //!
 //! // Aggregate to recover plaintext
-//! let result = SilentThreshold::<BlstBackend>::aggregate_decrypt(
-//!     &partial_decryptions, &ciphertext, &params,
+//! let result = scheme.aggregate_decrypt(
+//!     &ciphertext, &partial_decryptions, &selector, &key_material.aggregate_key,
 //! )?;
 //!
-//! assert_eq!(result.plaintext, plaintext);
+//! assert_eq!(result.plaintext.as_deref(), Some(plaintext.as_slice()));
 //! # Ok(())
 //! # }
 //! # #[cfg(not(feature = "blst"))]

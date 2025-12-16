@@ -25,11 +25,6 @@ use crate::errors::{BackendError, Error};
 ///   both Arkworks and blstrs backends.
 /// - **BN254**: A 254-bit curve providing ~100 bits of security. Supported only by
 ///   the Arkworks backend.
-///
-/// # Security Levels
-///
-/// - `Bls12_381`: ~128-bit security (recommended for most applications)
-/// - `Bn254`: ~100-bit security (faster but lower security margin)
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum CurveId {
     /// BN254 curve (~100-bit security)
@@ -154,7 +149,7 @@ impl BackendConfig {
                 }
             }
             (BackendId::Blst, CurveId::Bn254) => Err(BackendError::UnsupportedCurve(
-                "bn254 is not yet supported by the blstrs backend",
+                "bn254 is not supported by the blstrs backend; use arkworks",
             )),
         }
     }
@@ -204,8 +199,6 @@ pub struct ThresholdParameters {
     pub chunk_size: usize,
     /// Backend and curve configuration
     pub backend: BackendConfig,
-    /// Optional pre-generated tau (for testing only)
-    pub kzg_tau: Option<Vec<u8>>,
 }
 
 impl ThresholdParameters {
@@ -237,18 +230,12 @@ impl ThresholdParameters {
     /// )?;
     /// # Ok::<(), tess::Error>(())
     /// ```
-    pub fn new(
-        parties: usize,
-        threshold: usize,
-        backend: BackendConfig,
-        kzg_tau: Option<Vec<u8>>,
-    ) -> Result<Self, Error> {
+    pub fn new(parties: usize, threshold: usize, backend: BackendConfig) -> Result<Self, Error> {
         let params = Self {
             parties,
             threshold,
             chunk_size: parties, // Default to parties for now
             backend,
-            kzg_tau,
         };
         params.validate()?;
         Ok(params)
