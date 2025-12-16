@@ -45,12 +45,15 @@ where
     let mut selector = vec![false; PARTIES];
 
     // Select threshold + 1 parties for decryption
-    let mut partials = Vec::with_capacity(THRESHOLD + 1);
-    for idx in 0..=THRESHOLD {
-        selector[idx] = true;
-        let partial = scheme.partial_decrypt(&key_material.secret_keys[idx], &ciphertext)?;
-        partials.push(partial);
-    }
+    let partials = selector
+        .iter_mut()
+        .enumerate()
+        .take(THRESHOLD + 1)
+        .map(|(idx, sel)| {
+            *sel = true;
+            scheme.partial_decrypt(&key_material.secret_keys[idx], &ciphertext)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let result = scheme.aggregate_decrypt(
         &ciphertext,
