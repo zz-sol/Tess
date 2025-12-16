@@ -90,15 +90,15 @@ where
     let mut omega_inv_pows = Vec::with_capacity(n);
     let mut cur = F::one();
     for _ in 0..n {
-        omega_inv_pows.push(cur.clone());
-        cur *= omega_inv.clone();
+        omega_inv_pows.push(cur);
+        cur *= omega_inv;
     }
 
     let mut denominators: Vec<F> = omega_inv_pows
         .iter()
         .map(|w| {
-            let mut denom = w.clone();
-            denom *= n_scalar.clone();
+            let mut denom = *w;
+            denom *= n_scalar;
             denom
         })
         .collect();
@@ -107,12 +107,12 @@ where
     let mut polys = Vec::with_capacity(n);
     for (omega_i_inv, denom_inv) in omega_inv_pows.iter().zip(denominators.iter()) {
         let mut coeffs = Vec::with_capacity(n);
-        let mut power = omega_i_inv.clone();
+        let mut power = *omega_i_inv;
         for _ in 0..n {
-            let mut term = power.clone();
-            term *= denom_inv.clone();
+            let mut term = power;
+            term *= *denom_inv;
             coeffs.push(term);
-            power *= omega_i_inv.clone();
+            power *= *omega_i_inv;
         }
         polys.push(poly_from_coeffs(coeffs));
     }
@@ -134,15 +134,15 @@ where
 
     let mut coeffs = vec![F::one()];
     for point in points.iter().skip(1) {
-        let neg_point = -point.clone();
+        let neg_point = -*point;
         coeffs.push(F::zero());
         for i in (0..coeffs.len() - 1).rev() {
             let (head, tail) = coeffs.split_at_mut(i + 1);
             let coef = &mut head[i];
             let next = &mut tail[0];
-            let coef_clone = coef.clone();
+            let coef_clone = *coef;
             *next += coef_clone;
-            *coef *= neg_point.clone();
+            *coef *= neg_point;
         }
     }
 
@@ -150,9 +150,9 @@ where
         .last()
         .cloned()
         .ok_or(BackendError::Math("interpolation scale missing"))?;
-    let first_point = points[0].clone();
+    let first_point = points[0];
     for coeff in coeffs.iter().rev().skip(1) {
-        scale = scale * first_point.clone() + coeff.clone();
+        scale = scale * first_point + *coeff;
     }
     let scale_inv = scale
         .invert()
@@ -161,7 +161,7 @@ where
     let mut factor = eval;
     factor *= scale_inv;
     for coeff in coeffs.iter_mut() {
-        *coeff *= factor.clone();
+        *coeff *= factor;
     }
 
     Ok(poly_from_coeffs(coeffs))

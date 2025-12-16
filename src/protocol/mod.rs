@@ -176,10 +176,10 @@ impl<B: PairingBackend> Clone for PublicKey<B> {
     fn clone(&self) -> Self {
         Self {
             participant_id: self.participant_id,
-            bls_key: self.bls_key.clone(),
-            lagrange_li: self.lagrange_li.clone(),
-            lagrange_li_minus0: self.lagrange_li_minus0.clone(),
-            lagrange_li_x: self.lagrange_li_x.clone(),
+            bls_key: self.bls_key,
+            lagrange_li: self.lagrange_li,
+            lagrange_li_minus0: self.lagrange_li_minus0,
+            lagrange_li_x: self.lagrange_li_x,
             lagrange_li_lj_z: self.lagrange_li_lj_z.clone(),
         }
     }
@@ -256,7 +256,7 @@ impl<B: PairingBackend> Clone for PartialDecryption<B> {
     fn clone(&self) -> Self {
         Self {
             participant_id: self.participant_id,
-            response: self.response.clone(),
+            response: self.response,
         }
     }
 }
@@ -720,7 +720,7 @@ where
         // todo: use double-scalar-base-mul if we want to accelerate further. c.f. ed25519-dalek
         let sa2_0 = h.mul_scalar(&s0).add(&gamma_g2.mul_scalar(&s2));
         let sa2_1 = agg_key.z_g2.mul_scalar(&s0);
-        let sa2_2 = h_tau.mul_scalar(&(s0.clone() + s1.clone()));
+        let sa2_2 = h_tau.mul_scalar(&(s0 + s1));
         let sa2_3 = h.mul_scalar(&s1);
         let sa2_4 = h.mul_scalar(&s3);
         let sa2_5 = h_tau.add(&h_minus_one).mul_scalar(&s4);
@@ -814,8 +814,8 @@ where
     let mut carry = poly.coeffs().last().cloned().unwrap();
     for (idx, coeff) in poly.coeffs().iter().rev().skip(1).enumerate() {
         let pos = quotient.len() - 1 - idx;
-        quotient[pos] = carry.clone();
-        carry = coeff.clone() + root.clone() * carry;
+        quotient[pos] = carry;
+        carry = *coeff + root * carry;
     }
     (B::polynomial_from_coeffs(quotient), carry)
 }
@@ -828,11 +828,7 @@ fn scale_poly<B: ProtocolBackend>(
 where
     BackendScalar<B>: ProtocolScalar,
 {
-    let coeffs = poly
-        .coeffs()
-        .iter()
-        .map(|c| c.clone() * scalar.clone())
-        .collect();
+    let coeffs = poly.coeffs().iter().map(|c| *c * *scalar).collect();
     B::polynomial_from_coeffs(coeffs)
 }
 
@@ -847,10 +843,10 @@ where
     let len = a.coeffs().len().max(b.coeffs().len());
     let mut coeffs = vec![<B::Scalar as FieldElement>::zero(); len];
     for (i, coeff) in a.coeffs().iter().enumerate() {
-        coeffs[i] += coeff.clone();
+        coeffs[i] += *coeff;
     }
     for (i, coeff) in b.coeffs().iter().enumerate() {
-        coeffs[i] -= coeff.clone();
+        coeffs[i] -= *coeff;
     }
     B::polynomial_from_coeffs(coeffs)
 }
@@ -875,7 +871,7 @@ where
     ];
     for (i, coeff_a) in a.coeffs().iter().enumerate() {
         for (j, coeff_b) in b.coeffs().iter().enumerate() {
-            coeffs[i + j] += coeff_a.clone() * coeff_b.clone();
+            coeffs[i + j] += *coeff_a * *coeff_b;
         }
     }
     B::polynomial_from_coeffs(coeffs)
@@ -899,9 +895,9 @@ where
     let mut quotient = vec![<B::Scalar as FieldElement>::zero(); coeffs.len() - domain_size];
     while coeffs.len() > domain_size {
         let d = coeffs.len() - 1;
-        let lead = coeffs[d].clone();
+        let lead = coeffs[d];
         let q_idx = d - domain_size;
-        quotient[q_idx] = lead.clone();
+        quotient[q_idx] = lead;
         coeffs.pop();
         coeffs[q_idx] += lead;
         while coeffs
@@ -967,11 +963,11 @@ where
                 .first()
                 .cloned()
                 .unwrap_or_else(<B::Scalar as FieldElement>::zero);
-            let li_minus0_eval = li_eval.clone() - li_0;
+            let li_minus0_eval = *li_eval - li_0;
             let lagrange_li_minus0 = B::G1::generator().mul_scalar(&li_minus0_eval);
 
             // li_x = g * (L_i(tau) - L_i(0)) / tau
-            let li_x_eval = li_minus0_eval * tau_inv.clone();
+            let li_x_eval = li_minus0_eval * tau_inv;
             let lagrange_li_x = B::G1::generator().mul_scalar(&li_x_eval);
 
             Ok((lagrange_li, lagrange_li_minus0, lagrange_li_x))
@@ -997,10 +993,10 @@ where
                     let scalar = if i == j {
                         // (L_i(tau)^2 - L_i(tau)) / z(tau)
                         let li_eval: &B::Scalar = &li_evals[i];
-                        (li_eval.clone() * li_eval.clone() - li_eval.clone()) * z_eval_inv.clone()
+                        (*li_eval * *li_eval - *li_eval) * z_eval_inv
                     } else {
                         // (L_i(tau) * L_j(tau)) / z(tau)
-                        (li_evals[i].clone() * li_evals[j].clone()) * z_eval_inv.clone()
+                        (li_evals[i] * li_evals[j]) * z_eval_inv
                     };
                     Ok(B::G1::generator().mul_scalar(&scalar))
                 })
@@ -1220,7 +1216,7 @@ where
         if seen[partial.participant_id] {
             return Err(Error::MalformedInput("duplicate partial id".into()));
         }
-        responses[partial.participant_id] = partial.response.clone();
+        responses[partial.participant_id] = partial.response;
         seen[partial.participant_id] = true;
     }
 
@@ -1243,7 +1239,7 @@ where
             "invalid evaluation domain",
         )))?;
 
-    let mut points = vec![omega_zero.clone()];
+    let mut points = vec![omega_zero];
     let mut parties = Vec::new();
     for (i, (&selected, omega)) in selector.iter().zip(domain_elements.iter()).enumerate() {
         if selected {
@@ -1252,7 +1248,7 @@ where
             }
             parties.push(i);
         } else if i != 0 {
-            points.push(omega.clone());
+            points.push(*omega);
         }
     }
     let nonselected_count = selector.iter().filter(|&&selected| !selected).count();
@@ -1297,7 +1293,7 @@ where
             "domain size inversion failed",
         )))?;
 
-    let scalars: Vec<B::Scalar> = parties.iter().map(|&i| b_evals[i].clone()).collect();
+    let scalars: Vec<B::Scalar> = parties.iter().map(|&i| b_evals[i]).collect();
     trace!(
         selected_indices = ?parties,
         scalars = ?scalars,
@@ -1309,7 +1305,7 @@ where
     } else {
         let bases: Vec<B::G1> = parties
             .iter()
-            .map(|&i| agg_key.public_keys[i].bls_key.clone())
+            .map(|&i| agg_key.public_keys[i].bls_key)
             .collect();
         B::Msm::msm_g1(&bases, &scalars)
             .map_err(Error::Backend)?
@@ -1319,7 +1315,7 @@ where
     let sigma = if scalars.is_empty() {
         B::G2::identity()
     } else {
-        let bases: Vec<B::G2> = parties.iter().map(|&i| responses[i].clone()).collect();
+        let bases: Vec<B::G2> = parties.iter().map(|&i| responses[i]).collect();
         B::Msm::msm_g2(&bases, &scalars)
             .map_err(Error::Backend)?
             .mul_scalar(&n_inv)
@@ -1330,7 +1326,7 @@ where
     } else {
         let bases: Vec<B::G1> = parties
             .iter()
-            .map(|&i| agg_key.public_keys[i].lagrange_li_x.clone())
+            .map(|&i| agg_key.public_keys[i].lagrange_li_x)
             .collect();
         B::Msm::msm_g1(&bases, &scalars).map_err(Error::Backend)?
     };
@@ -1340,7 +1336,7 @@ where
     } else {
         let bases: Vec<B::G1> = parties
             .iter()
-            .map(|&i| agg_key.lagrange_row_sums[i].clone())
+            .map(|&i| agg_key.lagrange_row_sums[i])
             .collect();
         B::Msm::msm_g1(&bases, &scalars).map_err(Error::Backend)?
     };
@@ -1350,7 +1346,7 @@ where
     } else {
         let bases: Vec<B::G1> = parties
             .iter()
-            .map(|&i| agg_key.public_keys[i].lagrange_li_minus0.clone())
+            .map(|&i| agg_key.public_keys[i].lagrange_li_minus0)
             .collect();
         B::Msm::msm_g1(&bases, &scalars).map_err(Error::Backend)?
     };
