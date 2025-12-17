@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["ark_bls12381"]
+default = ["blst"]
 blst = []
 ark_bls12381 = ["ark-bls12-381", "ark-ff", "ark-ec", "ark-poly", "ark-serialize"]
-ark_bn254 = ["ark-bn254", "ark-ff", "ark-ec", "ark-serialize"]
+ark_bn254 = ["ark-bn254", "ark-ff", "ark-ec", "ark-poly", "ark-serialize"]
 
 [dependencies]
 ark-bls12-381 = { version = "0.5", optional = true }
