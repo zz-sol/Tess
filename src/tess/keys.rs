@@ -11,8 +11,10 @@ use rayon::iter::{
 };
 use tracing::{instrument, trace};
 
+use crate::arith::CurvePoint;
 use crate::{
-    KZG, PairingBackend, SRS, errors::{BackendError, Error}
+    Fr, KZG, LagrangePowers, PairingBackend, SRS,
+    errors::{BackendError, Error},
 };
 
 /// Secret key owned by a single participant.
@@ -68,12 +70,6 @@ impl<B: PairingBackend> Clone for PublicKey<B> {
     }
 }
 
-impl <B: PairingBackend> PublicKey<B> {
-    pub fn from_srs(srs: SRS<B>) ->Self{
-
-    }
-}
-
 /// Aggregate public key for encryption and verification.
 ///
 /// This structure contains the aggregated public keys and precomputed values
@@ -88,13 +84,60 @@ impl <B: PairingBackend> PublicKey<B> {
 /// - `precomputed_pairing`: Precomputed pairing for efficient verification
 /// - `commitment_params`: KZG commitment parameters from SRS
 #[derive(Clone, Debug)]
-pub struct AggregateKey<B: PairingBackend> {
+pub struct AggregateKey<B: PairingBackend<Scalar = Fr>> {
     pub public_keys: Vec<PublicKey<B>>,
     pub ask: B::G1,
     pub z_g2: B::G2,
     pub lagrange_row_sums: Vec<B::G1>,
     pub precomputed_pairing: B::Target,
-    pub commitment_params: CommitmentParams<B>,
+    pub srs: SRS<B>,
+}
+
+impl<B: PairingBackend<Scalar = Fr>> AggregateKey<B> {
+    #[instrument(level = "info", skip_all, fields(parties, num_keys = public_keys.len()))]
+    pub(crate) fn aggregate(
+        public_keys: &[PublicKey<B>],
+        params: &SRS<B>,
+        parties: usize,
+    ) -> Result<AggregateKey<B>, Error> {
+        if public_keys.is_empty() {
+            return Err(Error::InvalidConfig(
+                "cannot aggregate empty public key set".into(),
+            ));
+        }
+        if public_keys.len() != parties {
+            return Err(Error::InvalidConfig("public key length mismatch".into()));
+        }
+
+        let mut ask = B::G1::identity();
+        for pk in public_keys {
+            ask = ask.add(&pk.lagrange_li);
+        }
+
+        let mut lagrange_row_sums = vec![B::G1::identity(); parties];
+        for (idx, row) in lagrange_row_sums.iter_mut().enumerate() {
+            for pk in public_keys {
+                if let Some(val) = pk.lagrange_li_lj_z.get(idx) {
+                    *row = row.add(val);
+                }
+            }
+        }
+
+        let h_powers = &params.powers_of_h;
+        let g2_tau_n = h_powers
+            .get(parties)
+            .ok_or(Error::Backend(BackendError::Math("missing h^tau^n")))?;
+        let z_g2 = g2_tau_n.sub(&B::G2::generator());
+
+        Ok(AggregateKey {
+            public_keys: public_keys.to_vec(),
+            ask,
+            z_g2,
+            lagrange_row_sums,
+            precomputed_pairing: params.e_gh.clone(),
+            srs: params.clone(),
+        })
+    }
 }
 
 /// Complete key material bundle from key generation.
@@ -115,22 +158,19 @@ pub struct AggregateKey<B: PairingBackend> {
 /// In a real deployment, each participant would only receive their own secret key,
 /// while public keys and the aggregate key would be distributed to all parties.
 #[derive(Clone, Debug)]
-pub struct KeyMaterial<B: PairingBackend> {
+pub struct KeyMaterial<B: PairingBackend<Scalar = Fr>> {
     pub secret_keys: Vec<SecretKey<B>>,
     pub public_keys: Vec<PublicKey<B>>,
     pub aggregate_key: AggregateKey<B>,
-    pub kzg_params: CommitmentParams<B>,
+    pub kzg_params: SRS<B>,
 }
 
 #[instrument(level = "trace", skip_all, fields(participant_id))]
-fn derive_public_key_from_powers<B: ProtocolBackend>(
+fn derive_public_key_from_powers<B: PairingBackend<Scalar = Fr>>(
     participant_id: usize,
     sk: &SecretKey<B>,
     powers: &LagrangePowers<B>,
-) -> Result<PublicKey<B>, BackendError>
-where
-    BackendScalar<B>: ProtocolScalar,
-{
+) -> Result<PublicKey<B>, BackendError> {
     let lagrange_li = powers
         .li
         .get(participant_id)
@@ -164,53 +204,5 @@ where
         lagrange_li_minus0,
         lagrange_li_x,
         lagrange_li_lj_z,
-    })
-}
-
-#[instrument(level = "info", skip_all, fields(parties, num_keys = public_keys.len()))]
-fn aggregate_public_key<B: ProtocolBackend>(
-    public_keys: &[PublicKey<B>],
-    params: &CommitmentParams<B>,
-    parties: usize,
-) -> Result<AggregateKey<B>, Error>
-where
-    BackendScalar<B>: ProtocolScalar,
-{
-    if public_keys.is_empty() {
-        return Err(Error::InvalidConfig(
-            "cannot aggregate empty public key set".into(),
-        ));
-    }
-    if public_keys.len() != parties {
-        return Err(Error::InvalidConfig("public key length mismatch".into()));
-    }
-
-    let mut ask = B::G1::identity();
-    for pk in public_keys {
-        ask = ask.add(&pk.lagrange_li);
-    }
-
-    let mut lagrange_row_sums = vec![B::G1::identity(); parties];
-    for (idx, row) in lagrange_row_sums.iter_mut().enumerate() {
-        for pk in public_keys {
-            if let Some(val) = pk.lagrange_li_lj_z.get(idx) {
-                *row = row.add(val);
-            }
-        }
-    }
-
-    let h_powers = B::h_powers(params);
-    let g2_tau_n = h_powers
-        .get(parties)
-        .ok_or(Error::Backend(BackendError::Math("missing h^tau^n")))?;
-    let z_g2 = B::G2::from_affine(g2_tau_n).sub(&B::G2::generator());
-
-    Ok(AggregateKey {
-        public_keys: public_keys.to_vec(),
-        ask,
-        z_g2,
-        lagrange_row_sums,
-        precomputed_pairing: B::pairing_generator(params),
-        commitment_params: params.clone(),
     })
 }
