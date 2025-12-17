@@ -1,3 +1,28 @@
+//! blst-backed concrete implementation for BLS12-381 operations.
+//!
+//! This module provides the concrete types and implementations for the
+//! `BlstBackend` when the `blst` feature is enabled. It implements the
+//! `FieldElement`, `CurvePoint`, `TargetGroup`, `Polynomial`, `EvaluationDomain`,
+//! `PolynomialCommitment`, `MsmProvider`, and `PairingBackend` traits defined in
+//! `crate::backend::mod` using the `blstrs` crate.
+//!
+//! Exported types include:
+//! - `DensePolynomial` - dense coefficient polynomial type used for KZG
+//! - `BlstG1`, `BlstG2`, `BlstGt` - wrapped group/target types
+//! - `Radix2EvaluationDomain` - FFT domain implementation
+//! - `BlstKzg` - KZG commitment implementation
+//! - `BlstMsm` - MSM provider
+//! - `BlstBackend` - top-level backend type
+//!
+//! # Feature
+//!
+//! Compiled when the Cargo feature `blst` is enabled.
+//!
+//! # Example
+//!
+//! ```rust,no_run
+//! # #[cfg(feature = "blst")]
+//! # {
 use blstrs::{
     Bls12, Compress, G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar,
 };
@@ -20,6 +45,11 @@ pub struct DensePolynomial {
 }
 
 impl DensePolynomial {
+    /// Create a dense polynomial from the provided coefficient vector.
+    ///
+    /// The coefficients are in ascending order (constant term first). The
+    /// constructor trims leading zero coefficients to keep the representation
+    /// canonical.
     pub fn from_coefficients_vec(coeffs: Vec<Scalar>) -> Self {
         let mut poly = DensePolynomial { coeffs };
         poly.truncate_leading_zeros();
@@ -42,7 +72,9 @@ impl DensePolynomial {
             self.coeffs.len().saturating_sub(1)
         }
     }
-
+    /// Evaluate the polynomial at `point` using Horner's method.
+    ///
+    /// Returns the field element `p(point)`.
     pub fn evaluate(&self, point: &Scalar) -> Scalar {
         if self.coeffs.is_empty() {
             return Scalar::ZERO;
@@ -358,7 +390,10 @@ pub struct BlstPowers {
     pub powers_of_h: Vec<G2Affine>,
     pub e_gh: Gt,
 }
-
+/// Helper to construct KZG powers-of-tau parameters for the blst backend.
+///
+/// Returns `BlstPowers` containing `τ^i * G1`, `τ^i * G2` and the pairing
+/// `e(G, H)` for use in polynomial commitment operations.
 fn setup_powers(max_degree: usize, tau: &Scalar) -> Result<BlstPowers, BackendError> {
     if max_degree < 1 {
         return Err(BackendError::Math("degree must be >= 1"));
@@ -399,6 +434,7 @@ impl PolynomialCommitment<BlstBackend> for BlstKzg {
     type Polynomial = DensePolynomial;
 
     fn setup(max_degree: usize, tau: &Scalar) -> Result<Self::Parameters, BackendError> {
+        // Construct powers-of-tau parameters for KZG commitments.
         setup_powers(max_degree, tau)
     }
 
@@ -415,6 +451,7 @@ impl PolynomialCommitment<BlstBackend> for BlstKzg {
             .iter()
             .map(G1Projective::from)
             .collect();
+        // Compute commitment as multi-exponentiation over prepared G1 powers.
         Ok(BlstG1(G1Projective::multi_exp(&bases, scalars)))
     }
 
@@ -431,6 +468,7 @@ impl PolynomialCommitment<BlstBackend> for BlstKzg {
             .iter()
             .map(G2Projective::from)
             .collect();
+        // Compute commitment in G2 via multi-exponentiation.
         Ok(BlstG2(G2Projective::multi_exp(&bases, scalars)))
     }
 }
@@ -443,6 +481,7 @@ impl MsmProvider<BlstBackend> for BlstMsm {
         if bases.len() != scalars.len() {
             return Err(BackendError::Math("msm length mismatch"));
         }
+        // Perform multi-exponentiation on provided G1 bases and scalars.
         let projectives: Vec<G1Projective> = bases.iter().map(|p| p.0).collect();
         Ok(BlstG1(G1Projective::multi_exp(&projectives, scalars)))
     }
@@ -451,6 +490,7 @@ impl MsmProvider<BlstBackend> for BlstMsm {
         if bases.len() != scalars.len() {
             return Err(BackendError::Math("msm length mismatch"));
         }
+        // Perform multi-exponentiation on provided G2 bases and scalars.
         let projectives: Vec<G2Projective> = bases.iter().map(|p| p.0).collect();
         Ok(BlstG2(G2Projective::multi_exp(&projectives, scalars)))
     }
@@ -458,6 +498,10 @@ impl MsmProvider<BlstBackend> for BlstMsm {
 
 #[derive(Clone, Debug, Default)]
 pub struct BlstBackend;
+/// blst-backed `PairingBackend` implementation for BLS12-381.
+///
+/// `BlstBackend` ties together scalar types, curve groups, KZG commitment
+/// implementation and MSM provider for the `blstrs` backend.
 
 impl PairingBackend for BlstBackend {
     type Scalar = Scalar;

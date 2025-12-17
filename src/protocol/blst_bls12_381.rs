@@ -1,3 +1,22 @@
+//! blst-backed protocol glue for BLS12-381.
+//!
+//! This file contains the `ProtocolBackend` implementation for the `BlstBackend`.
+//! It adapts blstrs-specific types (scalars, polynomials, domains, and SRS powers)
+//! to the generic protocol interface used by `protocol::mod`.
+//!
+//! # Feature
+//!
+//! Compiled when the Cargo feature `blst` is enabled.
+//!
+//! # Example
+//!
+//! ```rust,no_run
+//! # #[cfg(feature = "blst")]
+//! # {
+//! use tess::backend::BlstBackend;
+//! # }
+//! ```
+
 use blstrs::Scalar;
 use ff::Field;
 use rand_core::RngCore;
@@ -12,7 +31,10 @@ use crate::{
 use super::{ProtocolBackend, SilentThreshold};
 
 pub type SilentThresholdBlst = SilentThreshold<BlstBackend>;
-
+/// Parse a trusted `tau` value encoded as 32 big-endian bytes into a `Scalar`.
+///
+/// Returns an `Error::InvalidConfig` if the encoding is the wrong length or
+/// does not decode to a valid scalar.
 fn parse_tau(bytes: &[u8]) -> Result<Scalar, Error> {
     if bytes.len() != 32 {
         return Err(Error::InvalidConfig(

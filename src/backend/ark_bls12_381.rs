@@ -1,3 +1,27 @@
+//! Arkworks-backed concrete implementation for BLS12-381 operations.
+//!
+//! This module provides the concrete types and implementations for the
+//! `ArkworksBls12` backend when the `ark_bls12381` feature is enabled. It
+//! implements the `FieldElement`, `CurvePoint`, `TargetGroup`, `Polynomial`,
+//! `EvaluationDomain`, `PolynomialCommitment`, `MsmProvider`, and `PairingBackend`
+//! traits from `crate::backend::mod` using the `arkworks` crates.
+//!
+//! Exported types include: `ArkworksBls12`, `ArkG1`, `ArkG2`, `ArkGt`,
+//! `DensePolynomial`, `BlsPowers`, and the corresponding FFT domain.
+//!
+//! # Feature
+//!
+//! Compiled when the Cargo feature `ark_bls12381` is enabled.
+//!
+//! # Example
+//!
+//! ```rust,no_run
+//! # #[cfg(feature = "ark_bls12381")]
+//! # {
+//! use tess::backend::ArkworksBls12;
+//! # }
+//! ```
+
 use ark_bls12_381::{
     Bls12_381, Fr as BlsFr, G1Affine as RawG1Affine, G1Projective as RawG1,
     G2Affine as RawG2Affine, G2Projective as RawG2,

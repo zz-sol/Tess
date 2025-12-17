@@ -1,3 +1,27 @@
+//! Arkworks-backed concrete implementation for BN254 operations.
+//!
+//! This module provides the concrete types and implementations for the
+//! `ArkworksBn254` backend when the `ark_bn254` feature is enabled. It
+//! implements the `FieldElement`, `CurvePoint`, `TargetGroup`, `Polynomial`,
+//! `EvaluationDomain`, `PolynomialCommitment`, `MsmProvider`, and `PairingBackend`
+//! traits from `crate::backend::mod` using the `arkworks` crates.
+//!
+//! Exported types include: `ArkworksBn254`, `ArkBnG1`, `ArkBnG2`, `ArkBnGt`,
+//! `DensePolynomial`, `BnPowers`, and the corresponding FFT domain.
+//!
+//! # Feature
+//!
+//! Compiled when the Cargo feature `ark_bn254` is enabled.
+//!
+//! # Example
+//!
+//! ```rust,no_run
+//! # #[cfg(feature = "ark_bn254")]
+//! # {
+//! use tess::backend::ArkworksBn254;
+//! # }
+//! ```
+
 use ark_bn254::{
     Bn254, Fr as BnFr, G1Affine as BnG1Affine, G1Projective as BnG1, G2Affine as BnG2Affine,
     G2Projective as BnG2,

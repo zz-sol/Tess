@@ -1,3 +1,22 @@
+//! Arkworks-backed protocol glue for BLS12-381.
+//!
+//! This file contains the `ProtocolBackend` implementation for the `ArkworksBls12`
+//! backend. It adapts arkworks-specific types (scalars, polynomials, domains, and
+//! SRS powers) to the generic protocol interface used by `protocol::mod`.
+//!
+//! # Feature
+//!
+//! Compiled when the Cargo feature `ark_bls12381` is enabled.
+//!
+//! # Example
+//!
+//! ```rust,no_run
+//! # #[cfg(feature = "ark_bls12381")]
+//! # {
+//! use tess::backend::ArkworksBls12;
+//! # }
+//! ```
+
 use ark_bls12_381::Fr as BlsFr;
 use ark_poly::{
     DenseUVPolynomial, EvaluationDomain, Radix2EvaluationDomain, univariate::DensePolynomial,

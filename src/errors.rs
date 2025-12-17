@@ -1,3 +1,18 @@
+//! Error types for the crate.
+//!
+//! This module defines low-level backend errors returned by concrete
+//! backend implementations (Arkworks, blstrs) as well as the high-level
+//! protocol-facing `Error` type used across the crate.
+//!
+//! The errors are implemented with `thiserror` so they are easy to convert
+//! and debug in higher-level code.
+//!
+//! # Examples
+//!
+//! ```rust
+//! use tess::errors::Error;
+//! ```
+
 use thiserror::Error;
 
 /// Errors bubbled up from backend implementations (Arkworks, blstrs, etc.).

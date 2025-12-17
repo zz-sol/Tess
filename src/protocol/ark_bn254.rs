@@ -1,3 +1,22 @@
+//! Arkworks-backed protocol glue for BN254.
+//!
+//! This file contains the `ProtocolBackend` implementation for the `ArkworksBn254`
+//! backend. It adapts arkworks-specific types (scalars, polynomials, domains, and
+//! SRS powers) to the generic protocol interface used by `protocol::mod`.
+//!
+//! # Feature
+//!
+//! Compiled when the Cargo feature `ark_bn254` is enabled.
+//!
+//! # Example
+//!
+//! ```rust,no_run
+//! # #[cfg(feature = "ark_bn254")]
+//! # {
+//! use tess::backend::ArkworksBn254;
+//! # }
+//! ```
+
 use ark_bn254::Fr as BnFr;
 use ark_poly::{
     DenseUVPolynomial, EvaluationDomain, Radix2EvaluationDomain, univariate::DensePolynomial,
