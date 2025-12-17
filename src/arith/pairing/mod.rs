@@ -10,6 +10,11 @@ mod ark_bls12_381;
 #[cfg(feature = "ark_bls12381")]
 pub use ark_bls12_381::PairingEngine;
 
+#[cfg(feature = "ark_bn254")]
+mod ark_bn254;
+#[cfg(feature = "ark_bn254")]
+pub use ark_bn254::PairingEngine;
+
 use crate::{BackendError, CurvePoint, FieldElement, TargetGroup};
 
 /// Main backend trait that ties together all cryptographic operations.

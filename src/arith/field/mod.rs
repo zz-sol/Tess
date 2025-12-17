@@ -14,6 +14,11 @@ mod ark_bls12_381;
 #[cfg(feature = "ark_bls12381")]
 pub use ark_bls12_381::Fr;
 
+#[cfg(feature = "ark_bn254")]
+mod ark_bn254;
+#[cfg(feature = "ark_bn254")]
+pub use ark_bn254::Fr;
+
 /// Field element abstraction for scalar field operations.
 ///
 /// This trait abstracts over the scalar field Fr of the elliptic curve, providing

@@ -12,6 +12,11 @@ mod ark_bls12_381;
 #[cfg(feature = "ark_bls12381")]
 pub use ark_bls12_381::{G1, G2, Gt};
 
+#[cfg(feature = "ark_bn254")]
+mod ark_bn254;
+#[cfg(feature = "ark_bn254")]
+pub use ark_bn254::{G1, G2, Gt};
+
 /// Elliptic curve point abstraction for G1 and G2 groups.
 ///
 /// This trait provides operations on elliptic curve points in projective coordinates,
