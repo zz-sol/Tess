@@ -136,6 +136,8 @@
 
 mod arith;
 mod errors;
+mod kzg;
 
 pub use arith::*;
 pub use errors::*;
+pub use kzg::*;
