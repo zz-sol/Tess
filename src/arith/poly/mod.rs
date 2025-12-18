@@ -1,3 +1,51 @@
+//! Polynomial operations and abstractions.
+//!
+//! This module provides trait abstractions for univariate polynomials and evaluation domains,
+//! which are essential for the KZG commitment scheme and Lagrange interpolation used in TESS.
+//!
+//! # Overview
+//!
+//! The module defines two main traits:
+//!
+//! - **[`Polynomial`]**: Univariate polynomial operations (evaluation, coefficient access)
+//! - **[`EvaluationDomain`]**: FFT operations over multiplicative subgroups
+//!
+//! # Polynomial Representation
+//!
+//! Polynomials are represented in **coefficient form** with coefficients in ascending order:
+//! - `p(x) = c_0 + c_1*x + c_2*x^2 + ... + c_n*x^n`
+//! - Stored as `[c_0, c_1, c_2, ..., c_n]`
+//!
+//! # FFT Evaluation Domains
+//!
+//! Evaluation domains are multiplicative subgroups of the scalar field, used for:
+//! - Efficient polynomial interpolation via FFT/IFFT
+//! - Lagrange polynomial basis generation
+//! - Fast polynomial multiplication
+//!
+//! Domain size must be a power of two for FFT to work correctly.
+//!
+//! # Example
+//!
+//! ```rust
+//! use tess::{DensePolynomial, FieldElement, Fr, Polynomial};
+//! use rand::thread_rng;
+//!
+//! let mut rng = thread_rng();
+//!
+//! // Create a polynomial from coefficients: p(x) = 1 + 2x + 3x^2
+//! let coeffs = vec![Fr::from_u64(1), Fr::from_u64(2), Fr::from_u64(3)];
+//! let poly = DensePolynomial::from_coefficients_vec(coeffs);
+//!
+//! // Evaluate at a random point
+//! let x = Fr::random(&mut rng);
+//! let y = poly.evaluate(&x);
+//!
+//! // Access polynomial properties
+//! println!("Degree: {}", poly.degree());
+//! println!("Coefficients: {:?}", poly.coeffs());
+//! ```
+
 use std::fmt::Debug;
 
 use crate::FieldElement;

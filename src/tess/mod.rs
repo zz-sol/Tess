@@ -86,6 +86,7 @@ pub trait ThresholdEncryption<B: PairingBackend<Scalar = Fr>>:
         &self,
         rng: &mut R,
         agg_key: &AggregateKey<B>,
+        params: &Params<B>,
         threshold: usize,
         payload: &[u8],
     ) -> Result<Ciphertext<B>, Error>;
@@ -128,7 +129,13 @@ mod tests {
             .expect("key generation");
 
         let ciphertext = scheme
-            .encrypt(&mut rng, &key_material.aggregate_key, THRESHOLD, PAYLOAD)
+            .encrypt(
+                &mut rng,
+                &key_material.aggregate_key,
+                &params,
+                THRESHOLD,
+                PAYLOAD,
+            )
             .expect("encryption");
 
         let mut selector = vec![false; PARTIES];
@@ -165,7 +172,13 @@ mod tests {
             .expect("key generation");
 
         let ciphertext = scheme
-            .encrypt(&mut rng, &key_material.aggregate_key, THRESHOLD, PAYLOAD)
+            .encrypt(
+                &mut rng,
+                &key_material.aggregate_key,
+                &params,
+                THRESHOLD,
+                PAYLOAD,
+            )
             .expect("encryption");
 
         let mut selector = vec![false; PARTIES];
@@ -211,7 +224,13 @@ mod tests {
             .expect("key generation");
 
         let ciphertext = scheme
-            .encrypt(&mut rng, &key_material.aggregate_key, THRESHOLD, PAYLOAD)
+            .encrypt(
+                &mut rng,
+                &key_material.aggregate_key,
+                &params,
+                THRESHOLD,
+                PAYLOAD,
+            )
             .expect("encryption");
 
         let mut partials = Vec::new();

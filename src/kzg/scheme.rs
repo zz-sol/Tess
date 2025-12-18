@@ -8,9 +8,70 @@ use crate::{
     PolynomialCommitment,
 };
 
+/// KZG polynomial commitment scheme implementation.
+///
+/// This is a zero-sized type that implements the [`PolynomialCommitment`] trait,
+/// providing Kate-Zaverucha-Goldberg commitment functionality.
+///
+/// # Overview
+///
+/// KZG commitments allow committing to a polynomial in a way that:
+/// - The commitment is succinct (constant size, single group element)
+/// - One can efficiently prove evaluations at any point
+/// - The scheme is binding and hiding under the Knowledge of Exponent assumption
+///
+/// # Example
+///
+/// ```rust
+/// use rand_core::RngCore;
+/// use tess::{DensePolynomial, Fr, KZG, PairingBackend, PairingEngine, Polynomial, PolynomialCommitment};
+///
+/// // Setup: generate SRS with max degree 10
+/// let mut seed = [0u8; 32];
+/// rand::thread_rng().fill_bytes(&mut seed);
+/// let srs = <KZG as PolynomialCommitment<PairingEngine>>::setup(10, &seed).unwrap();
+///
+/// // Create a polynomial
+/// let coeffs = vec![Fr::from_u64(1), Fr::from_u64(2), Fr::from_u64(3)];
+/// let poly = DensePolynomial::from_coefficients_vec(coeffs);
+///
+/// // Commit to the polynomial in G1
+/// let commitment = <KZG as PolynomialCommitment<PairingEngine>>::commit_g1(&srs, &poly).unwrap();
+/// println!("Commitment: {:?}", commitment);
+/// ```
 #[derive(Debug)]
 pub struct KZG;
 
+/// Structured Reference String (SRS) for KZG commitments.
+///
+/// The SRS contains precomputed powers of tau in both G1 and G2 groups,
+/// which are used for polynomial commitments and proof generation.
+///
+/// # Fields
+///
+/// - `powers_of_g`: Powers of tau in G1: `[g, g*τ, g*τ², ..., g*τⁿ]`
+/// - `powers_of_h`: Powers of tau in G2: `[h, h*τ, h*τ², ..., h*τⁿ]`
+/// - `e_gh`: Precomputed pairing `e(g, h)` for efficient verification
+///
+/// # Security
+///
+/// The SRS is generated from a secret tau (τ) which must be securely discarded
+/// after setup. In production, use a multi-party computation ceremony to ensure
+/// that no single party knows tau.
+///
+/// # Example
+///
+/// ```rust
+/// use tess::{Fr, PairingEngine, SRS, FieldElement};
+/// use rand::thread_rng;
+///
+/// let mut rng = thread_rng();
+/// let tau = Fr::random(&mut rng);
+///
+/// // UNSAFE: Only for testing! In production, use MPC ceremony
+/// let srs = SRS::<PairingEngine>::new_unsafe(&tau, 100).unwrap();
+/// println!("SRS size: G1={}, G2={}", srs.powers_of_g.len(), srs.powers_of_h.len());
+/// ```
 #[derive(Debug)]
 pub struct SRS<B: PairingBackend<Scalar = Fr>> {
     pub powers_of_g: Vec<B::G1>,
@@ -34,8 +95,42 @@ where
 }
 
 impl<B: PairingBackend<Scalar = Fr>> SRS<B> {
-    /// Creates a new SRS with precomputed Lagrange commitments
-    /// it uses
+    /// Creates a new SRS from a secret tau value.
+    ///
+    /// # Security Warning
+    ///
+    /// This function is marked as `unsafe` in its naming because the secret `tau` value
+    /// must be securely discarded after calling this function. In production deployments,
+    /// this should only be used within a multi-party computation (MPC) ceremony where no
+    /// single party knows the full tau value.
+    ///
+    /// # Parameters
+    ///
+    /// - `tau`: The secret trapdoor value (must be non-zero)
+    /// - `max_degree`: Maximum polynomial degree supported by this SRS
+    ///
+    /// # Returns
+    ///
+    /// Returns an SRS containing:
+    /// - `powers_of_g[i] = g * τ^i` for i = 0..max_degree
+    /// - `powers_of_h[i] = h * τ^i` for i = 0..max_degree
+    /// - `e_gh = e(g, h)` (precomputed pairing)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tess::{Fr, PairingEngine, SRS, FieldElement};
+    /// use rand::thread_rng;
+    ///
+    /// let mut rng = thread_rng();
+    /// let tau = Fr::random(&mut rng);
+    ///
+    /// // TESTING ONLY - do not use in production!
+    /// let srs = SRS::<PairingEngine>::new_unsafe(&tau, 100).unwrap();
+    ///
+    /// // In production, immediately drop tau after SRS generation
+    /// // and preferably use MPC to generate it
+    /// ```
     pub fn new_unsafe(tau: &B::Scalar, max_degree: usize) -> Result<Self, String> {
         if max_degree < 1 {
             return Err("SRS setup failed".to_string());

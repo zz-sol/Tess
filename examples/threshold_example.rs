@@ -36,7 +36,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let message = vec![0u8; 32];
 
     // Encrypt
-    let ciphertext = scheme.encrypt(&mut rng, &key_material.aggregate_key, THRESHOLD, &message)?;
+    let ciphertext = scheme.encrypt(
+        &mut rng,
+        &key_material.aggregate_key,
+        &params,
+        THRESHOLD,
+        &message,
+    )?;
 
     // Prepare selector and collect partials from the first `THRESHOLD` participants
     let mut selector = vec![false; PARTIES];

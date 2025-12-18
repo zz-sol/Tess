@@ -36,7 +36,13 @@ pub fn bench_threshold(c: &mut Criterion) {
         b.iter(|| {
             let payload = b"The quick brown fox jumps over the lazy dog";
             let ct = scheme
-                .encrypt(&mut rng, &key_material.aggregate_key, threshold, payload)
+                .encrypt(
+                    &mut rng,
+                    &key_material.aggregate_key,
+                    &params,
+                    threshold,
+                    payload,
+                )
                 .expect("encrypt failed");
             black_box(ct);
         })
@@ -45,7 +51,13 @@ pub fn bench_threshold(c: &mut Criterion) {
     // Prepare a ciphertext and partial decryptions for decryption benchmark
     let payload = b"benchmark payload for threshold decryption";
     let ct = scheme
-        .encrypt(&mut rng, &key_material.aggregate_key, threshold, payload)
+        .encrypt(
+            &mut rng,
+            &key_material.aggregate_key,
+            &params,
+            threshold,
+            payload,
+        )
         .expect("encrypt failed");
 
     // Collect partial decryptions from the first `threshold` participants

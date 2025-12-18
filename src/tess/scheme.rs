@@ -153,6 +153,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
         &self,
         rng: &mut R,
         agg_key: &AggregateKey<B>,
+        params: &Params<B>,
         threshold: usize,
         payload: &[u8],
     ) -> Result<Ciphertext<B>, Error> {
@@ -177,7 +178,9 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
         let sa2_2 = h.mul_scalar(&(s0 + s1));
         let sa2_3 = h.mul_scalar(&s1);
         let sa2_4 = h.mul_scalar(&s3);
-        let sa2_5 = h.mul_scalar(&(s0 + (Fr::one() - Fr::one())));
+        let sa2_5 = params.srs.powers_of_h[1]
+            .sub(&params.srs.powers_of_h[0])
+            .mul_scalar(&s4);
 
         let proof_g1 = vec![sa1_0, sa1_1];
         let proof_g2 = vec![sa2_0, sa2_1, sa2_2, sa2_3, sa2_4, sa2_5];
@@ -269,7 +272,8 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
         }
 
         // Recover shared secret using pairing
-        let _recovered = B::pairing(&B::G1::generator(), &aggregated);
+        let recovered = B::pairing(&B::G1::generator(), &aggregated);
+        assert_eq!(recovered, ciphertext.shared_secret);
 
         // Use a hash of the pairing result for decryption (placeholder)
         let mut hasher = Hasher::new();

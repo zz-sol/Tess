@@ -52,7 +52,7 @@ pub trait PairingBackend: Send + Sync + Debug + Sized + 'static {
     /// Second curve group (G2).
     type G2: CurvePoint<Self::Scalar>;
     /// Pairing target group (GT).
-    type Target: TargetGroup<Scalar = Self::Scalar>;
+    type Target: TargetGroup<Scalar = Self::Scalar> + PartialEq;
 
     /// Computes the bilinear pairing: `e(g1, g2) -> GT`.
     ///

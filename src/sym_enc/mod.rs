@@ -1,3 +1,38 @@
+//! Symmetric encryption primitives for payload encapsulation.
+//!
+//! This module provides symmetric encryption used to encrypt payloads in the
+//! threshold encryption scheme. The shared secret derived from the threshold
+//! protocol is used to encrypt the actual message payload.
+//!
+//! # Overview
+//!
+//! After threshold decryption recovers the shared secret, this module's
+//! encryption is used to:
+//! - Encrypt the payload during encryption (using shared secret as key)
+//! - Decrypt the payload during aggregated decryption
+//!
+//! # Implementations
+//!
+//! Currently provides:
+//! - **[`Blake3XorEncryption`]**: XOR-based encryption using BLAKE3 in XOF mode
+//!
+//! # Example
+//!
+//! ```rust
+//! use tess::sym_enc::{Blake3XorEncryption, SymmetricEncryption};
+//!
+//! let encryption = Blake3XorEncryption::default();
+//! let secret = b"my-secret-key-32-bytes-long-min!";
+//! let plaintext = b"Hello, threshold encryption!";
+//!
+//! // Encrypt
+//! let ciphertext = encryption.encrypt(secret, plaintext).unwrap();
+//!
+//! // Decrypt
+//! let recovered = encryption.decrypt(secret, &ciphertext).unwrap();
+//! assert_eq!(plaintext, &recovered[..]);
+//! ```
+
 use std::fmt::Debug;
 
 use blake3::Hasher;
@@ -7,19 +42,82 @@ use crate::Error;
 /// Trait for symmetric encryption/decryption operations.
 ///
 /// This trait abstracts away the details of symmetric encryption,
-/// allowing for flexible implementations (e.g., BLAKE3 XOR, AES-GCM, etc.).
+/// allowing for flexible implementations (e.g., BLAKE3 XOR, AES-GCM, ChaCha20-Poly1305).
+///
+/// # Security
+///
+/// Implementations should provide authenticated encryption when possible.
+/// The current XOR-based implementation is suitable for demonstration but
+/// production systems should consider authenticated encryption schemes.
+///
+/// # Example
+///
+/// ```rust
+/// use tess::sym_enc::{Blake3XorEncryption, SymmetricEncryption};
+///
+/// let enc = Blake3XorEncryption::default();
+/// let key = b"secret-key";
+/// let msg = b"secret message";
+///
+/// let ct = enc.encrypt(key, msg).unwrap();
+/// let pt = enc.decrypt(key, &ct).unwrap();
+/// assert_eq!(msg, &pt[..]);
+/// ```
 pub trait SymmetricEncryption: Debug + Send + Sync {
     /// Encrypts plaintext with the given secret.
+    ///
+    /// # Parameters
+    ///
+    /// - `secret`: Secret key bytes (length depends on implementation)
+    /// - `plaintext`: Data to encrypt
+    ///
+    /// # Returns
+    ///
+    /// The encrypted ciphertext, or an error if encryption fails.
     fn encrypt(&self, secret: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Error>;
 
     /// Decrypts ciphertext with the given secret.
+    ///
+    /// # Parameters
+    ///
+    /// - `secret`: Secret key bytes (must match encryption key)
+    /// - `ciphertext`: Encrypted data
+    ///
+    /// # Returns
+    ///
+    /// The decrypted plaintext, or an error if decryption fails.
     fn decrypt(&self, secret: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, Error>;
 }
 
-/// BLAKE3-based symmetric encryption using XOR.
+/// BLAKE3-based symmetric encryption using XOR with extended output function (XOF).
 ///
-/// This implementation derives a keystream from a secret using BLAKE3's
-/// XOF mode and XORs it with the plaintext/ciphertext.
+/// This implementation uses BLAKE3 in XOF mode to derive a keystream from the secret,
+/// then XORs it with the plaintext/ciphertext. This provides confidentiality but not
+/// authentication.
+///
+/// # Security Considerations
+///
+/// - **Confidentiality**: Provides semantic security assuming BLAKE3 XOF is a secure PRF
+/// - **Authentication**: Does NOT provide authentication or integrity protection
+/// - **Recommended for**: Demonstration and non-critical applications
+/// - **Production alternative**: Consider AES-GCM or ChaCha20-Poly1305 for authenticated encryption
+///
+/// # Example
+///
+/// ```rust
+/// use tess::sym_enc::{Blake3XorEncryption, SymmetricEncryption};
+///
+/// // Create with custom domain separation
+/// let enc = Blake3XorEncryption::new(b"my-app::encryption");
+///
+/// let secret = b"32-byte-secret-key-here-please!";
+/// let message = b"Sensitive data to encrypt";
+///
+/// let ciphertext = enc.encrypt(secret, message).unwrap();
+/// let plaintext = enc.decrypt(secret, &ciphertext).unwrap();
+///
+/// assert_eq!(message, &plaintext[..]);
+/// ```
 #[derive(Debug, Clone)]
 pub struct Blake3XorEncryption {
     /// Domain separation tag for BLAKE3 KDF.
@@ -35,7 +133,7 @@ impl Blake3XorEncryption {
 
 impl Default for Blake3XorEncryption {
     fn default() -> Self {
-        Self::new(b"tess::threshold::payload")
+        Self::new(b"tess::payload")
     }
 }
 
