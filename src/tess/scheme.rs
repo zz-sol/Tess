@@ -6,13 +6,25 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tracing::instrument;
 
 use crate::{
-    AggregateKey, Ciphertext, DecryptionResult, Fr, KeyMaterial, LagrangePowers, PairingBackend,
-    Params, PartialDecryption, PublicKey, SRS, SecretKey, ThresholdEncryption,
+    AggregateKey,
+    Ciphertext,
+    DecryptionResult,
+    Fr,
+    KeyMaterial,
+    LagrangePowers,
+    PairingBackend,
+    Params,
+    PartialDecryption,
+    PublicKey,
+    SRS,
+    SecretKey,
+    ThresholdEncryption,
     arith::{CurvePoint, FieldElement},
     build_lagrange_polys,
     errors::{BackendError, Error},
     sym_enc::{Blake3XorEncryption, SymmetricEncryption},
-    tess::keys::derive_public_key_from_srs,
+    tess::keys::derive_public_key_from_powers,
+    // tess::keys::derive_public_key_from_srs,
 };
 
 /// The Silent Threshold scheme implementation.
@@ -97,22 +109,24 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
         &self,
         rng: &mut R,
         parties: usize,
-        srs: &SRS<B>,
+        params: &Params<B>,
     ) -> Result<KeyMaterial<B>, Error> {
         let secret_keys = Self::generate_secret_keys(rng, parties);
 
         let public_keys = secret_keys
             .par_iter()
-            .map(|sk| derive_public_key_from_srs::<B>(sk.participant_id, sk, srs))
-            .collect::<Result<Vec<_>, Error>>()?;
+            .map(|sk| {
+                derive_public_key_from_powers::<B>(sk.participant_id, sk, &params.lagrange_powers)
+            })
+            .collect::<Result<Vec<_>, BackendError>>()?;
 
-        let aggregate_key = AggregateKey::aggregate_keys(&public_keys, srs, parties)?;
+        let aggregate_key = AggregateKey::aggregate_keys(&public_keys, &params.srs, parties)?;
 
         Ok(KeyMaterial {
             secret_keys,
             public_keys,
             aggregate_key,
-            kzg_params: srs.clone(),
+            kzg_params: params.srs.clone(),
         })
     }
 

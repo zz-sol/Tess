@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let params = scheme.param_gen(&mut rng, PARTIES, THRESHOLD)?;
 
     // Generate key material
-    let key_material = scheme.keygen(&mut rng, PARTIES, &params.srs)?;
+    let key_material = scheme.keygen(&mut rng, PARTIES, &params)?;
 
     // Example message
     let message = vec![0u8; 32];

@@ -2,6 +2,7 @@ use core::fmt::Debug;
 
 use tracing::instrument;
 
+use crate::LagrangePowers;
 use crate::arith::CurvePoint;
 use crate::{
     Fr, PairingBackend, SRS,
@@ -156,63 +157,37 @@ pub struct KeyMaterial<B: PairingBackend<Scalar = Fr>> {
     pub kzg_params: SRS<B>,
 }
 
-// #[instrument(level = "trace", skip_all, fields(participant_id))]
-// fn derive_public_key_from_powers<B: PairingBackend<Scalar = Fr>>(
-//     participant_id: usize,
-//     sk: &SecretKey<B>,
-//     powers: &LagrangePowers<B>,
-// ) -> Result<PublicKey<B>, BackendError> {
-//     let lagrange_li = powers
-//         .li
-//         .get(participant_id)
-//         .ok_or(BackendError::Math("missing lagrange power"))?
-//         .mul_scalar(&sk.scalar);
-
-//     let lagrange_li_minus0 = powers
-//         .li_minus0
-//         .get(participant_id)
-//         .ok_or(BackendError::Math("missing lagrange power minus0"))?
-//         .mul_scalar(&sk.scalar);
-
-//     let lagrange_li_x = powers
-//         .li_x
-//         .get(participant_id)
-//         .ok_or(BackendError::Math("missing lagrange power x"))?
-//         .mul_scalar(&sk.scalar);
-
-//     let lagrange_li_lj_z = powers
-//         .li_lj_z
-//         .get(participant_id)
-//         .ok_or(BackendError::Math("missing lagrange powers li_lj_z"))?
-//         .iter()
-//         .map(|val| val.mul_scalar(&sk.scalar))
-//         .collect();
-
-//     Ok(PublicKey {
-//         participant_id,
-//         bls_key: B::G1::generator().mul_scalar(&sk.scalar),
-//         lagrange_li,
-//         lagrange_li_minus0,
-//         lagrange_li_x,
-//         lagrange_li_lj_z,
-//     })
-// }
-
-pub(crate) fn derive_public_key_from_srs<B: PairingBackend<Scalar = Fr>>(
+#[instrument(level = "trace", skip_all, fields(participant_id))]
+pub(crate) fn derive_public_key_from_powers<B: PairingBackend<Scalar = Fr>>(
     participant_id: usize,
     sk: &SecretKey<B>,
-    srs: &SRS<B>,
-) -> Result<PublicKey<B>, Error> {
-    let lagrange_li = srs
-        .lagrange_commitments
+    powers: &LagrangePowers<B>,
+) -> Result<PublicKey<B>, BackendError> {
+    let lagrange_li = powers
+        .li
         .get(participant_id)
-        .ok_or_else(|| Error::InvalidConfig("missing lagrange commitment".into()))?
+        .ok_or(BackendError::Math("missing lagrange power"))?
         .mul_scalar(&sk.scalar);
 
-    // Create placeholder lagrange hints (would be computed from SRS in full implementation)
-    let lagrange_li_minus0 = lagrange_li.clone();
-    let lagrange_li_x = lagrange_li.clone();
-    let lagrange_li_lj_z = vec![lagrange_li.clone(); srs.lagrange_commitments.len()];
+    let lagrange_li_minus0 = powers
+        .li_minus0
+        .get(participant_id)
+        .ok_or(BackendError::Math("missing lagrange power minus0"))?
+        .mul_scalar(&sk.scalar);
+
+    let lagrange_li_x = powers
+        .li_x
+        .get(participant_id)
+        .ok_or(BackendError::Math("missing lagrange power x"))?
+        .mul_scalar(&sk.scalar);
+
+    let lagrange_li_lj_z = powers
+        .li_lj_z
+        .get(participant_id)
+        .ok_or(BackendError::Math("missing lagrange powers li_lj_z"))?
+        .iter()
+        .map(|val| val.mul_scalar(&sk.scalar))
+        .collect();
 
     Ok(PublicKey {
         participant_id,
@@ -223,3 +198,29 @@ pub(crate) fn derive_public_key_from_srs<B: PairingBackend<Scalar = Fr>>(
         lagrange_li_lj_z,
     })
 }
+
+// pub(crate) fn derive_public_key_from_srs<B: PairingBackend<Scalar = Fr>>(
+//     participant_id: usize,
+//     sk: &SecretKey<B>,
+//     srs: &SRS<B>,
+// ) -> Result<PublicKey<B>, Error> {
+//     let lagrange_li = srs
+//         .lagrange_commitments
+//         .get(participant_id)
+//         .ok_or_else(|| Error::InvalidConfig("missing lagrange commitment".into()))?
+//         .mul_scalar(&sk.scalar);
+
+//     // Create placeholder lagrange hints (would be computed from SRS in full implementation)
+//     let lagrange_li_minus0 = lagrange_li.clone();
+//     let lagrange_li_x = lagrange_li.clone();
+//     let lagrange_li_lj_z = vec![lagrange_li.clone(); srs.lagrange_commitments.len()];
+
+//     Ok(PublicKey {
+//         participant_id,
+//         bls_key: B::G1::generator().mul_scalar(&sk.scalar),
+//         lagrange_li,
+//         lagrange_li_minus0,
+//         lagrange_li_x,
+//         lagrange_li_lj_z,
+//     })
+// }

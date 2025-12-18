@@ -70,7 +70,7 @@ pub trait ThresholdEncryption<B: PairingBackend<Scalar = Fr>>:
         &self,
         rng: &mut R,
         parties: usize,
-        srs: &SRS<B>,
+        srs: &Params<B>,
     ) -> Result<KeyMaterial<B>, Error>;
 
     /// Recomputes the aggregate key from public keys.
