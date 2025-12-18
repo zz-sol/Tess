@@ -113,10 +113,6 @@ impl<B: PairingBackend<Scalar = Fr>> AggregateKey<B> {
             }
         }
 
-        // let g1_gen = B::G1::generator();
-        // let g2_gen = B::G2::generator();
-        // let precomputed_pairing = B::pairing(&g1_gen, &g2_gen);
-
         let g2_gen = params.srs.powers_of_h[0];
         // h * tau^n is available at index `parties` in the SRS
         let h_tau_n = params.srs.powers_of_h[parties];
@@ -198,29 +194,3 @@ pub(crate) fn derive_public_key_from_powers<B: PairingBackend<Scalar = Fr>>(
         lagrange_li_lj_z,
     })
 }
-
-// pub(crate) fn derive_public_key_from_srs<B: PairingBackend<Scalar = Fr>>(
-//     participant_id: usize,
-//     sk: &SecretKey<B>,
-//     srs: &SRS<B>,
-// ) -> Result<PublicKey<B>, Error> {
-//     let lagrange_li = srs
-//         .lagrange_commitments
-//         .get(participant_id)
-//         .ok_or_else(|| Error::InvalidConfig("missing lagrange commitment".into()))?
-//         .mul_scalar(&sk.scalar);
-
-//     // Create placeholder lagrange hints (would be computed from SRS in full implementation)
-//     let lagrange_li_minus0 = lagrange_li.clone();
-//     let lagrange_li_x = lagrange_li.clone();
-//     let lagrange_li_lj_z = vec![lagrange_li.clone(); srs.lagrange_commitments.len()];
-
-//     Ok(PublicKey {
-//         participant_id,
-//         bls_key: B::G1::generator().mul_scalar(&sk.scalar),
-//         lagrange_li,
-//         lagrange_li_minus0,
-//         lagrange_li_x,
-//         lagrange_li_lj_z,
-//     })
-// }

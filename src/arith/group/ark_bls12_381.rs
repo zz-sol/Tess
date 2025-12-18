@@ -1,5 +1,6 @@
 use ark_bls12_381::{Bls12_381, G1Affine, G1Projective, G2Affine, G2Projective};
 use ark_ec::PrimeGroup;
+use ark_ec::VariableBaseMSM;
 use ark_ec::pairing::PairingOutput;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{PrimeField, Zero};
@@ -65,12 +66,9 @@ impl CurvePoint<Fr> for G1 {
             scalars.len(),
             "points and scalars must have the same length"
         );
-        points
-            .iter()
-            .zip(scalars.iter())
-            .fold(Self::identity(), |acc, (point, scalar)| {
-                acc.add(&point.mul_scalar(scalar))
-            })
+        let affine_points = Self::batch_normalize(points);
+        let result = G1Projective::msm(&affine_points, scalars).unwrap();
+        G1(result)
     }
 }
 
@@ -124,12 +122,9 @@ impl CurvePoint<Fr> for G2 {
             scalars.len(),
             "points and scalars must have the same length"
         );
-        points
-            .iter()
-            .zip(scalars.iter())
-            .fold(Self::identity(), |acc, (point, scalar)| {
-                acc.add(&point.mul_scalar(scalar))
-            })
+        let affine_points = Self::batch_normalize(points);
+        let result = G2Projective::msm(&affine_points, scalars).unwrap();
+        G2(result)
     }
 }
 

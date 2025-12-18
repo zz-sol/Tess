@@ -72,7 +72,6 @@ impl FieldElement for Scalar {
 
     fn two_adicity_generator(n: usize) -> Self {
         // Get a primitive n-th root of unity
-        use ff::Field;
         if n == 1 {
             return Scalar::ONE;
         }
@@ -89,29 +88,21 @@ impl FieldElement for Scalar {
     }
 
     fn batch_inversion(elements: &mut [Self]) -> Result<(), BackendError> {
-        use ff::Field;
+        use ff::BatchInvert;
 
         if elements.is_empty() {
             return Ok(());
         }
 
-        let mut prod = Scalar::ONE;
-        let mut products = Vec::with_capacity(elements.len());
-
+        // Check for zero elements before batch inversion
         for elem in elements.iter() {
             if bool::from(elem.is_zero()) {
                 return Err(BackendError::Math("cannot invert zero element"));
             }
-            products.push(prod);
-            prod *= *elem;
         }
 
-        let mut inv_prod = <Self as FieldElement>::invert(&prod)
-            .ok_or(BackendError::Math("batch inversion failed"))?;
-        for (i, elem) in elements.iter_mut().enumerate().rev() {
-            *elem = inv_prod * products[i];
-            inv_prod *= *elem;
-        }
+        // Use ff crate's batch inversion (Montgomery's trick)
+        elements.iter_mut().batch_invert();
 
         Ok(())
     }

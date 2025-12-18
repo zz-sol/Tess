@@ -51,34 +51,22 @@ impl FieldElement for Fr {
     }
 
     fn batch_inversion(elements: &mut [Self]) -> Result<(), BackendError> {
-        use ark_ff::Field;
-
         if elements.is_empty() {
             return Ok(());
         }
 
-        let mut prod = <Fr as ArkOne>::one();
-        let mut products = Vec::with_capacity(elements.len());
-
+        // Check for zero elements before batch inversion
         for elem in elements.iter() {
             if elem.is_zero() {
                 return Err(BackendError::Math("cannot invert zero element"));
             }
-            products.push(prod);
-            prod *= elem;
         }
 
-        let mut inv_prod = prod
-            .inverse()
-            .ok_or(BackendError::Math("batch inversion failed"))?;
-        for (i, elem) in elements.iter_mut().enumerate().rev() {
-            *elem = inv_prod * products[i];
-            inv_prod *= *elem;
-        }
+        // Use ark-ff's batch inversion (Montgomery's trick)
+        ark_ff::batch_inversion(elements);
 
         Ok(())
     }
-
     fn from_u64(n: u64) -> Self {
         Fr::from(n)
     }

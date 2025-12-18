@@ -58,3 +58,32 @@ pub trait PolynomialCommitment<B: PairingBackend>: Send + Sync + Debug + 'static
         polynomial: &Self::Polynomial,
     ) -> Result<B::G2, BackendError>;
 }
+
+#[cfg(test)]
+mod tests {
+    use rand::{SeedableRng, rngs::StdRng};
+    use rand_core::RngCore;
+
+    use crate::{
+        CurvePoint, DensePolynomial, FieldElement, Fr, KZG, PairingBackend, PolynomialCommitment,
+        SRS,
+    };
+
+    fn kzg_commitment_helper<B: PairingBackend<Scalar = Fr>>(rng: &mut StdRng) {
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+        let params: SRS<B> = KZG::setup(8, &seed).expect("setup");
+        let coeffs: Vec<Fr> = (0..4).map(|_| Fr::random(rng)).collect();
+        let poly = DensePolynomial::from_coefficients_vec(coeffs);
+        let commitment: B::G1 = KZG::commit_g1(&params, &poly).expect("commit");
+        assert!(
+            !commitment.is_identity(),
+            "commitment should not be identity for random polynomial"
+        );
+    }
+
+    #[test]
+    fn kzg_commitment() {
+        kzg_commitment_helper::<crate::PairingEngine>(&mut StdRng::from_entropy());
+    }
+}
