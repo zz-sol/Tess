@@ -2,12 +2,12 @@ use core::fmt::Debug;
 
 use tracing::instrument;
 
-use crate::LagrangePowers;
 use crate::arith::CurvePoint;
 use crate::{
     Fr, PairingBackend, SRS,
     errors::{BackendError, Error},
 };
+use crate::{LagrangePowers, Params};
 
 /// Secret key owned by a single participant.
 ///
@@ -74,7 +74,6 @@ impl<B: PairingBackend> Clone for PublicKey<B> {
 /// - `z_g2`: Commitment to the vanishing polynomial in G2
 /// - `lagrange_row_sums`: Precomputed sums of Lagrange commitments for verification
 /// - `precomputed_pairing`: Precomputed pairing for efficient verification
-/// - `commitment_params`: KZG commitment parameters from SRS
 #[derive(Clone, Debug)]
 pub struct AggregateKey<B: PairingBackend<Scalar = Fr>> {
     pub public_keys: Vec<PublicKey<B>>,
@@ -82,14 +81,13 @@ pub struct AggregateKey<B: PairingBackend<Scalar = Fr>> {
     pub z_g2: B::G2,
     pub lagrange_row_sums: Vec<B::G1>,
     pub precomputed_pairing: B::Target,
-    pub srs: SRS<B>,
 }
 
 impl<B: PairingBackend<Scalar = Fr>> AggregateKey<B> {
-    #[instrument(level = "info", skip_all, fields(parties, num_keys = public_keys.len()))]
+    #[instrument(level = "trace", skip_all, fields(parties, num_keys = public_keys.len()))]
     pub(crate) fn aggregate_keys(
         public_keys: &[PublicKey<B>],
-        params: &SRS<B>,
+        params: &Params<B>,
         parties: usize,
     ) -> Result<AggregateKey<B>, Error> {
         if public_keys.is_empty() {
@@ -115,19 +113,21 @@ impl<B: PairingBackend<Scalar = Fr>> AggregateKey<B> {
             }
         }
 
-        let h_powers = &params.powers_of_h;
-        let g2_tau_n = h_powers
-            .get(parties)
-            .ok_or(Error::Backend(BackendError::Math("missing h^tau^n")))?;
-        let z_g2 = g2_tau_n.sub(&B::G2::generator());
+        // let g1_gen = B::G1::generator();
+        // let g2_gen = B::G2::generator();
+        // let precomputed_pairing = B::pairing(&g1_gen, &g2_gen);
+
+        let g2_gen = params.srs.powers_of_h[0];
+        // h * tau^n is available at index `parties` in the SRS
+        let h_tau_n = params.srs.powers_of_h[parties];
+        let z_g2 = h_tau_n.sub(&g2_gen);
 
         Ok(AggregateKey {
             public_keys: public_keys.to_vec(),
             ask,
             z_g2,
             lagrange_row_sums,
-            precomputed_pairing: params.e_gh.clone(),
-            srs: params.clone(),
+            precomputed_pairing: params.srs.e_gh.clone(),
         })
     }
 }

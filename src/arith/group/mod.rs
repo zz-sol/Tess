@@ -84,6 +84,9 @@ pub trait CurvePoint<F: FieldElement>: Clone + Send + Sync + Debug + 'static + C
     /// This is more efficient than normalizing points individually due to
     /// Montgomery's trick for batch inversion.
     fn batch_normalize(points: &[Self]) -> Vec<Self::Affine>;
+
+    /// Performs multi scalar multiplications.
+    fn multi_scalar_multipliation(points: &[Self], scalar: &[F]) -> Self;
 }
 
 /// Pairing target group (GT) abstraction.

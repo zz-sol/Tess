@@ -22,7 +22,9 @@ blstrs = "0.7"
 ff = "0.13"
 group = "0.13"
 pairing = "0.23"
-rand_core = "0.6"
+rand = "0.9"
+rand_chacha = "0.9"
+rand_core = "0.9"
 rayon = { version = "1.10", optional = false }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "1.0"

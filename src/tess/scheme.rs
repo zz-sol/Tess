@@ -82,7 +82,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
 
         let tau = B::Scalar::random(rng);
 
-        let srs = SRS::new(&tau, parties).map_err(|e| {
+        let srs = SRS::new_unsafe(&tau, parties).map_err(|e| {
             Error::Backend(BackendError::Other(format!("SRS generation failed: {}", e)))
         })?;
 
@@ -120,7 +120,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
             })
             .collect::<Result<Vec<_>, BackendError>>()?;
 
-        let aggregate_key = AggregateKey::aggregate_keys(&public_keys, &params.srs, parties)?;
+        let aggregate_key = AggregateKey::aggregate_keys(&public_keys, &params, parties)?;
 
         Ok(KeyMaterial {
             secret_keys,
@@ -134,10 +134,10 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
     fn aggregate_public_key(
         &self,
         public_keys: &[PublicKey<B>],
-        srs: &SRS<B>,
+        params: &Params<B>,
         parties: usize,
     ) -> Result<AggregateKey<B>, Error> {
-        AggregateKey::aggregate_keys(public_keys, srs, parties)
+        AggregateKey::aggregate_keys(public_keys, params, parties)
     }
 
     #[instrument(level = "info", skip_all, fields(threshold, payload_len = payload.len()))]

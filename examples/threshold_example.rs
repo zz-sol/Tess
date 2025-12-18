@@ -13,6 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .with_span_events(fmt::format::FmtSpan::ENTER | fmt::format::FmtSpan::CLOSE)
         .with_target(false)
+        .with_ansi(false)
         .init();
 
     let mut rng = StdRng::seed_from_u64(42);

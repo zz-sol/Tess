@@ -30,7 +30,7 @@ use core::fmt::Debug;
 
 use rand_core::RngCore;
 
-use crate::{Fr, PairingBackend, SRS, errors::Error};
+use crate::{Fr, PairingBackend, errors::Error};
 
 mod scheme;
 pub use scheme::SilentThresholdScheme;
@@ -73,11 +73,11 @@ pub trait ThresholdEncryption<B: PairingBackend<Scalar = Fr>>:
         srs: &Params<B>,
     ) -> Result<KeyMaterial<B>, Error>;
 
-    /// Recomputes the aggregate key from public keys.
+    /// Recomputes the aggregate key from public keys using precomputed Lagrange powers.
     fn aggregate_public_key(
         &self,
         public_keys: &[PublicKey<B>],
-        srs: &SRS<B>,
+        params: &Params<B>,
         parties: usize,
     ) -> Result<AggregateKey<B>, Error>;
 

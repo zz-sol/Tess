@@ -1,3 +1,5 @@
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::CurvePoint;
@@ -32,8 +34,39 @@ where
 
 impl<B: PairingBackend<Scalar = Fr>> SRS<B> {
     /// Creates a new SRS with precomputed Lagrange commitments
-    pub fn new(tau: &B::Scalar, parties: usize) -> Result<Self, String> {
-        KZG::setup(parties, tau).map_err(|e| format!("SRS setup failed: {:?}", e))
+    /// it uses
+    pub fn new_unsafe(tau: &B::Scalar, max_degree: usize) -> Result<Self, String> {
+        if max_degree < 1 {
+            return Err(format!("SRS setup failed"));
+        }
+
+        let g = B::G1::generator();
+        let h = B::G2::generator();
+
+        let mut powers_of_tau = vec![<B::Scalar as FieldElement>::one()];
+        let mut cur = *tau;
+        for _ in 0..max_degree {
+            powers_of_tau.push(cur);
+            cur *= tau;
+        }
+
+        let powers_of_g: Vec<B::G1> = powers_of_tau
+            .par_iter()
+            .map(|power| g.mul_scalar(power))
+            .collect();
+
+        let powers_of_h: Vec<B::G2> = powers_of_tau
+            .par_iter()
+            .map(|power| h.mul_scalar(power))
+            .collect();
+
+        let e_gh = B::pairing(&g, &h);
+
+        Ok(SRS {
+            powers_of_g,
+            powers_of_h,
+            e_gh,
+        })
     }
 }
 
@@ -41,9 +74,10 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
     type Parameters = SRS<B>;
     type Polynomial = DensePolynomial;
 
-    fn setup(max_degree: usize, tau: &Fr) -> Result<Self::Parameters, BackendError> {
-        // Construct powers-of-tau parameters for KZG commitments.
-        setup_powers_bls::<B>(max_degree, tau)
+    fn setup(max_degree: usize, seed: &[u8; 32]) -> Result<Self::Parameters, BackendError> {
+        let mut rng = ChaCha20Rng::from_seed(*seed);
+        let tau = Fr::random(&mut rng);
+        SRS::new_unsafe(&tau, max_degree).map_err(|e| BackendError::Other(e))
     }
 
     fn commit_g1(
@@ -77,41 +111,4 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
         }
         Ok(acc)
     }
-}
-
-fn setup_powers_bls<B: PairingBackend<Scalar = Fr>>(
-    max_degree: usize,
-    tau: &B::Scalar,
-) -> Result<SRS<B>, BackendError> {
-    if max_degree < 1 {
-        return Err(BackendError::Math("degree must be >= 1"));
-    }
-
-    let g = B::G1::generator();
-    let h = B::G2::generator();
-
-    let mut powers_of_tau = vec![<B::Scalar as FieldElement>::one()];
-    let mut cur = *tau;
-    for _ in 0..max_degree {
-        powers_of_tau.push(cur);
-        cur *= tau;
-    }
-
-    let powers_of_g: Vec<B::G1> = powers_of_tau
-        .par_iter()
-        .map(|power| g.mul_scalar(power))
-        .collect();
-
-    let powers_of_h: Vec<B::G2> = powers_of_tau
-        .par_iter()
-        .map(|power| h.mul_scalar(power))
-        .collect();
-
-    let e_gh = B::pairing(&g, &h);
-
-    Ok(SRS {
-        powers_of_g,
-        powers_of_h,
-        e_gh,
-    })
 }

@@ -46,7 +46,7 @@ pub trait PolynomialCommitment<B: PairingBackend>: Send + Sync + Debug + 'static
     ///
     /// This generates powers of tau: `[τ^0, τ^1, ..., τ^max_degree]` in both G1 and G2.
     /// The secret `tau` must be securely discarded after setup.
-    fn setup(max_degree: usize, tau: &B::Scalar) -> Result<Self::Parameters, BackendError>;
+    fn setup(max_degree: usize, seed: &[u8; 32]) -> Result<Self::Parameters, BackendError>;
 
     /// Commits to a polynomial in G1.
     ///

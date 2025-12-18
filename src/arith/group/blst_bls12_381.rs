@@ -82,6 +82,15 @@ impl CurvePoint<Scalar> for G1 {
         <G1Projective as Curve>::batch_normalize(&points, &mut affines);
         affines
     }
+
+    fn multi_scalar_multipliation(points: &[Self], scalars: &[Scalar]) -> Self {
+        assert_eq!(
+            points.len(),
+            scalars.len(),
+            "points and scalars must have the same length"
+        );
+        G1::multi_exp(points, scalars)
+    }
 }
 
 impl CurvePoint<Scalar> for G2 {
@@ -127,6 +136,15 @@ impl CurvePoint<Scalar> for G2 {
         let mut affines = vec![G2Affine::identity(); points.len()];
         <G2Projective as Curve>::batch_normalize(&points, &mut affines);
         affines
+    }
+
+    fn multi_scalar_multipliation(points: &[Self], scalars: &[Scalar]) -> Self {
+        assert_eq!(
+            points.len(),
+            scalars.len(),
+            "points and scalars must have the same length"
+        );
+        G2::multi_exp(points, scalars)
     }
 }
 
