@@ -25,7 +25,7 @@ use crate::{
     build_lagrange_polys,
     errors::{BackendError, Error},
     sym_enc::{Blake3XorEncryption, SymmetricEncryption},
-    tess::keys::derive_public_key_from_powers, // tess::keys::derive_public_key_from_srs,
+    tess::keys::derive_public_key, // tess::keys::derive_public_key_from_srs,
 };
 
 /// The Silent Threshold scheme implementation.
@@ -110,6 +110,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
         Ok(Params {
             srs,
             lagrange_powers,
+            lagrange_polys: lagranges,
         })
     }
 
@@ -124,13 +125,10 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
 
         let public_keys = secret_keys
             .par_iter()
-            .map(|sk| {
-                derive_public_key_from_powers::<B>(sk.participant_id, sk, &params.lagrange_powers)
-            })
+            .map(|sk| derive_public_key::<B>(sk.participant_id, sk, params))
             .collect::<Result<Vec<_>, BackendError>>()?;
 
         let aggregate_key = AggregateKey::aggregate_keys(&public_keys, params, parties)?;
-
         Ok(KeyMaterial {
             secret_keys,
             public_keys,
