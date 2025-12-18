@@ -22,17 +22,19 @@ use crate::{BackendError, PairingBackend, Polynomial};
 /// ```rust,no_run
 /// # #[cfg(feature = "blst")]
 /// # {
-/// use tess::backend::{BlstBackend, PairingBackend, FieldElement, PolynomialCommitment};
+/// use tess::backend::{BlstBackend, PairingBackend, FieldElement};
+/// use tess::{KZG, PolynomialCommitment};
 /// use rand::thread_rng;
 ///
-/// type PC = <BlstBackend as PairingBackend>::PolynomialCommitment;
 /// type Scalar = <BlstBackend as PairingBackend>::Scalar;
 ///
 /// let mut rng = thread_rng();
 /// let tau = Scalar::random(&mut rng);
+/// let seed = tau.to_bytes_be();
 ///
 /// // Setup commitment parameters (trusted setup)
-/// let params = PC::setup(10, &tau).expect("setup failed");
+/// let params = <KZG as PolynomialCommitment<BlstBackend>>::setup(10, &seed)
+///     .expect("setup failed");
 /// # }
 /// ```
 pub trait PolynomialCommitment<B: PairingBackend>: Send + Sync + Debug + 'static {

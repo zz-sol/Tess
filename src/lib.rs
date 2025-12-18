@@ -19,7 +19,7 @@
 //!   for field elements, curve points, pairing operations, polynomials, and KZG commitments.
 //!
 //! - **[`protocol`]**: High-level threshold encryption protocol implementation. Contains
-//!   the [`ThresholdScheme`] trait and [`SilentThreshold`](protocol::SilentThreshold)
+//!   the [`ThresholdEncryption`] trait and [`SilentThreshold`](protocol::SilentThreshold)
 //!   implementation, along with key structures like [`SecretKey`](protocol::SecretKey),
 //!   [`PublicKey`](protocol::PublicKey), [`Ciphertext`](protocol::Ciphertext), etc.
 //!
@@ -35,7 +35,7 @@
 //!
 //! ```rust,no_run
 //! use tess::{ThresholdParameters, BackendConfig, CurveId, BackendId};
-//! use tess::protocol::{SilentThreshold, ThresholdScheme};
+//! use tess::protocol::{SilentThreshold, ThresholdEncryption};
 //! # #[cfg(feature = "blst")]
 //! use tess::backend::BlstBackend;
 //! # #[cfg(feature = "blst")]
@@ -56,15 +56,18 @@
 //! let scheme = SilentThreshold::<BlstBackend>::default();
 //!
 //! // Generate Structured Reference String (one-time trusted setup)
-//! let srs = scheme.srs_gen(&mut rng, &params)?;
+//! let setup = scheme.param_gen(&mut rng, params.parties, params.threshold)?;
 //!
 //! // Generate key material for all participants
-//! let key_material = scheme.keygen(&mut rng, &params, &srs)?;
+//! let key_material = scheme.keygen(&mut rng, params.parties, &setup)?;
 //!
 //! // Encrypt a message
 //! let plaintext = b"Secret message";
 //! let ciphertext = scheme.encrypt(
-//!     &mut rng, &key_material.aggregate_key, &params, plaintext,
+//!     &mut rng,
+//!     &key_material.aggregate_key,
+//!     params.threshold,
+//!     plaintext,
 //! )?;
 //!
 //! // Partial decryptions from threshold participants (e.g., first 3 parties)
@@ -100,23 +103,23 @@
 //!
 //! ## Protocol Workflow
 //!
-//! 1. **SRS Generation**: Generate a Structured Reference String using [`ThresholdScheme::srs_gen`].
+//! 1. **SRS Generation**: Generate a Structured Reference String using [`ThresholdEncryption::param_gen`].
 //!    This is a one-time trusted setup that produces KZG commitment parameters.
 //!
-//! 2. **Key Generation**: Each participant generates keys using [`ThresholdScheme::keygen`],
+//! 2. **Key Generation**: Each participant generates keys using [`ThresholdEncryption::keygen`],
 //!    which produces a secret key and public key with Lagrange commitment hints.
 //!
-//! 3. **Key Aggregation**: Combine public keys using [`ThresholdScheme::aggregate_public_key`]
+//! 3. **Key Aggregation**: Combine public keys using [`ThresholdEncryption::aggregate_public_key`]
 //!    to create an aggregate key for encryption.
 //!
-//! 4. **Encryption**: Encrypt messages using [`ThresholdScheme::encrypt`], which produces
+//! 4. **Encryption**: Encrypt messages using [`ThresholdEncryption::encrypt`], which produces
 //!    a ciphertext with KZG proof and BLAKE3-encapsulated payload.
 //!
 //! 5. **Partial Decryption**: Each participant creates a decryption share using
-//!    [`ThresholdScheme::partial_decrypt`].
+//!    [`ThresholdEncryption::partial_decrypt`].
 //!
 //! 6. **Aggregate Decryption**: Combine at least `t` partial decryptions using
-//!    [`ThresholdScheme::aggregate_decrypt`] to recover the plaintext.
+//!    [`ThresholdEncryption::aggregate_decrypt`] to recover the plaintext.
 //!
 //! ## Performance
 //!

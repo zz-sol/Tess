@@ -28,11 +28,13 @@ use crate::{
 };
 
 /// The Silent Threshold scheme implementation.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SilentThresholdScheme<B: PairingBackend> {
     _phantom: PhantomData<B>,
     symmetric_enc: Blake3XorEncryption,
 }
+
+pub type SilentThreshold<B> = SilentThresholdScheme<B>;
 
 impl<B: PairingBackend> SilentThresholdScheme<B> {
     /// Creates a new Silent Threshold scheme instance.
@@ -58,6 +60,12 @@ impl<B: PairingBackend> SilentThresholdScheme<B> {
                 scalar: B::Scalar::random(rng),
             })
             .collect()
+    }
+}
+
+impl<B: PairingBackend> Default for SilentThresholdScheme<B> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

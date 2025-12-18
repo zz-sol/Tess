@@ -1,5 +1,5 @@
 use ark_bls12_381::Fr as ArkFr;
-use ark_ff::{Field, One, UniformRand, Zero};
+use ark_ff::{FftField, Field, One as ArkOne, UniformRand, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use rand_core::RngCore;
 
@@ -15,7 +15,7 @@ impl FieldElement for Fr {
     }
 
     fn one() -> Self {
-        One::one()
+        ArkOne::one()
     }
 
     fn random<R: RngCore + ?Sized>(rng: &mut R) -> Self {
@@ -43,18 +43,16 @@ impl FieldElement for Fr {
     }
 
     fn two_adic_root_of_unity() -> Self {
-        use ark_ff::{Field, fields::models::FpConfig};
-        // For BLS12-381, get the 2-adic root of unity
-        Fr::get_root_of_unity(1 << Fr::MODULUS_BIT_SIZE).unwrap_or_else(Fr::one)
+        <Fr as FftField>::get_root_of_unity(1u64 << <Fr as FftField>::TWO_ADICITY)
+            .unwrap_or_else(<Fr as ArkOne>::one)
     }
 
     fn two_adicity_generator(n: usize) -> Self {
-        use ark_ff::Field;
         if n == 1 {
-            return Fr::one();
+            return <Fr as ArkOne>::one();
         }
 
-        // Get the 2-adic root of unity and raise to appropriate power
+        // Get the 2-adic root of unity and raise it to the appropriate power
         let root = Self::two_adic_root_of_unity();
         let k = (n - 1).next_power_of_two().trailing_zeros() as usize + 1;
         let exp_power = (1u64 << k) / n as u64;
@@ -62,17 +60,15 @@ impl FieldElement for Fr {
         // Convert to [u64; 4] format for pow
         let mut exp = [0u64; 4];
         exp[0] = exp_power;
-        root.pow(&exp)
+        ark_ff::Field::pow(&root, &exp)
     }
 
     fn batch_inversion(elements: &mut [Self]) -> Result<(), BackendError> {
-        use ark_ff::Field;
-
         if elements.is_empty() {
             return Ok(());
         }
 
-        let mut prod = Fr::one();
+        let mut prod = <Fr as ArkOne>::one();
         let mut products = Vec::with_capacity(elements.len());
 
         for elem in elements.iter() {
@@ -80,7 +76,7 @@ impl FieldElement for Fr {
                 return Err(BackendError::Math("cannot invert zero element"));
             }
             products.push(prod);
-            prod *= elem;
+            prod *= *elem;
         }
 
         let mut inv_prod = prod

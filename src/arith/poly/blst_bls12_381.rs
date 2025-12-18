@@ -34,6 +34,10 @@ impl Polynomial<Fr> for DensePolynomial {
     fn truncate(&mut self, len: usize) {
         self.coeffs.truncate(len);
     }
+
+    fn from_coefficients_vec(coeffs: Vec<Fr>) -> Self {
+        DensePolynomial::from_coefficients_vec(coeffs)
+    }
 }
 
 impl DensePolynomial {

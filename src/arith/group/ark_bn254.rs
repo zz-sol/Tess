@@ -58,6 +58,20 @@ impl CurvePoint<Fr> for G1 {
         let projective: Vec<G1Projective> = points.iter().map(|p| p.0).collect();
         <G1Projective as CurveGroup>::normalize_batch(&projective)
     }
+
+    fn multi_scalar_multipliation(points: &[Self], scalars: &[Fr]) -> Self {
+        assert_eq!(
+            points.len(),
+            scalars.len(),
+            "points and scalars must have the same length"
+        );
+        points
+            .iter()
+            .zip(scalars.iter())
+            .fold(Self::identity(), |acc, (point, scalar)| {
+                acc.add(&point.mul_scalar(scalar))
+            })
+    }
 }
 
 impl CurvePoint<Fr> for G2 {
@@ -102,6 +116,20 @@ impl CurvePoint<Fr> for G2 {
     fn batch_normalize(points: &[Self]) -> Vec<Self::Affine> {
         let projective: Vec<G2Projective> = points.iter().map(|p| p.0).collect();
         <G2Projective as CurveGroup>::normalize_batch(&projective)
+    }
+
+    fn multi_scalar_multipliation(points: &[Self], scalars: &[Fr]) -> Self {
+        assert_eq!(
+            points.len(),
+            scalars.len(),
+            "points and scalars must have the same length"
+        );
+        points
+            .iter()
+            .zip(scalars.iter())
+            .fold(Self::identity(), |acc, (point, scalar)| {
+                acc.add(&point.mul_scalar(scalar))
+            })
     }
 }
 

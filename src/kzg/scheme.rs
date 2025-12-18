@@ -4,7 +4,8 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::CurvePoint;
 use crate::{
-    BackendError, DensePolynomial, FieldElement, Fr, PairingBackend, PolynomialCommitment,
+    BackendError, DensePolynomial, FieldElement, Fr, PairingBackend, Polynomial,
+    PolynomialCommitment,
 };
 
 #[derive(Debug)]
@@ -88,7 +89,7 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
         if degree + 1 > params.powers_of_g.len() {
             return Err(BackendError::Math("polynomial degree too large"));
         }
-        let scalars = &polynomial.coeffs[..=degree];
+        let scalars = &polynomial.coeffs()[..=degree];
         let mut acc = B::G1::identity();
         for (base, scalar) in params.powers_of_g[..=degree].iter().zip(scalars.iter()) {
             acc = acc.add(&base.mul_scalar(scalar));
@@ -104,7 +105,7 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
         if degree + 1 > params.powers_of_h.len() {
             return Err(BackendError::Math("polynomial degree too large"));
         }
-        let scalars = &polynomial.coeffs[..=degree];
+        let scalars = &polynomial.coeffs()[..=degree];
         let mut acc = B::G2::identity();
         for (base, scalar) in params.powers_of_h[..=degree].iter().zip(scalars.iter()) {
             acc = acc.add(&base.mul_scalar(scalar));

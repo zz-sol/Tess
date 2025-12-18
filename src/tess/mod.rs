@@ -8,22 +8,22 @@
 //!
 //! The threshold encryption scheme consists of six main phases:
 //!
-//! 1. **SRS Generation** ([`ThresholdScheme::srs_gen`]): Generate a Structured Reference String
+//! 1. **SRS Generation** ([`ThresholdEncryption::param_gen`]): Generate a Structured Reference String
 //!    containing KZG commitment parameters and precomputed Lagrange polynomial commitments.
 //!
-//! 2. **Key Generation** ([`ThresholdScheme::keygen`]): Each participant generates a secret key
+//! 2. **Key Generation** ([`ThresholdEncryption::keygen`]): Each participant generates a secret key
 //!    and derives their public key with Lagrange commitments for efficient verification.
 //!
-//! 3. **Key Aggregation** ([`ThresholdScheme::aggregate_public_key`]): Combine all public keys
+//! 3. **Key Aggregation** ([`ThresholdEncryption::aggregate_public_key`]): Combine all public keys
 //!    into an aggregate key that will be used for encryption.
 //!
-//! 4. **Encryption** ([`ThresholdScheme::encrypt`]): Encrypt a payload using the aggregate key,
+//! 4. **Encryption** ([`ThresholdEncryption::encrypt`]): Encrypt a payload using the aggregate key,
 //!    producing a ciphertext with KZG proofs and BLAKE3-encapsulated payload.
 //!
-//! 5. **Partial Decryption** ([`ThresholdScheme::partial_decrypt`]): Each participant computes
+//! 5. **Partial Decryption** ([`ThresholdEncryption::partial_decrypt`]): Each participant computes
 //!    their decryption share using their secret key.
 //!
-//! 6. **Aggregate Decryption** ([`ThresholdScheme::aggregate_decrypt`]): Combine at least `t`
+//! 6. **Aggregate Decryption** ([`ThresholdEncryption::aggregate_decrypt`]): Combine at least `t`
 //!    partial decryptions to recover the shared secret and decrypt the payload.
 
 use core::fmt::Debug;
@@ -33,7 +33,7 @@ use rand_core::RngCore;
 use crate::{Fr, PairingBackend, errors::Error};
 
 mod scheme;
-pub use scheme::SilentThresholdScheme;
+pub use scheme::{SilentThreshold, SilentThresholdScheme};
 
 mod keys;
 pub use keys::{AggregateKey, KeyMaterial, PublicKey, SecretKey};
@@ -44,10 +44,10 @@ pub use params::Params;
 mod ciphertext;
 pub use ciphertext::{Ciphertext, DecryptionResult, PartialDecryption};
 
-/// High-level threshold encryption scheme interface.
+/// High-level threshold scheme interface.
 ///
-/// This trait defines the complete API for a threshold encryption scheme,
-/// from setup through key generation to encryption and decryption.
+/// This trait defines the complete API for a threshold scheme, from setup
+/// through key generation to encryption and decryption.
 pub trait ThresholdEncryption<B: PairingBackend<Scalar = Fr>>:
     Debug + Send + Sync + 'static
 {

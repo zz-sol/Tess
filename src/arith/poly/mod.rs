@@ -33,6 +33,9 @@ pub trait Polynomial<F: FieldElement>: Clone + Send + Sync + Debug + 'static {
 
     /// Truncates the polynomial to the specified length.
     fn truncate(&mut self, len: usize);
+
+    /// Constructs a polynomial from its coefficients (ascending order).
+    fn from_coefficients_vec(coeffs: Vec<F>) -> Self;
 }
 
 /// FFT evaluation domain for polynomial operations.
