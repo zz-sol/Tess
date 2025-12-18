@@ -10,7 +10,7 @@
 //! # Examples
 //!
 //! ```rust
-//! use tess::errors::Error;
+//! use tess::Error;
 //! ```
 
 use thiserror::Error;

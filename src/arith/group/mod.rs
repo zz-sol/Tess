@@ -29,24 +29,18 @@ pub use ark_bn254::{G1, G2, Gt};
 ///
 /// # Example
 ///
-/// ```rust,no_run
-/// # #[cfg(feature = "blst")]
-/// # {
-/// use tess::backend::{BlstBackend, PairingBackend, FieldElement, CurvePoint};
+/// ```rust
 /// use rand::thread_rng;
-///
-/// type G1 = <BlstBackend as PairingBackend>::G1;
-/// type Scalar = <BlstBackend as PairingBackend>::Scalar;
+/// use tess::{CurvePoint, FieldElement, PairingBackend, PairingEngine};
 ///
 /// let mut rng = thread_rng();
-/// let scalar = Scalar::random(&mut rng);
+/// let scalar = <PairingEngine as PairingBackend>::Scalar::random(&mut rng);
 ///
-/// // Point operations
-/// let g = G1::generator();
+/// let g = <PairingEngine as PairingBackend>::G1::generator();
 /// let point = g.mul_scalar(&scalar);
 /// let doubled = point.add(&point);
 /// let neg = point.negate();
-/// # }
+/// println!("{:?} {:?} {:?}", point, doubled, neg);
 /// ```
 pub trait CurvePoint<F: FieldElement>: Clone + Send + Sync + Debug + 'static + Copy {
     /// Associated affine representation.
@@ -96,23 +90,15 @@ pub trait CurvePoint<F: FieldElement>: Clone + Send + Sync + Debug + 'static + C
 ///
 /// # Example
 ///
-/// ```rust,no_run
-/// # #[cfg(feature = "blst")]
-/// # {
-/// use tess::backend::{BlstBackend, PairingBackend, CurvePoint, TargetGroup};
+/// ```rust
+/// use tess::{CurvePoint, PairingBackend, PairingEngine, TargetGroup};
 ///
-/// type G1 = <BlstBackend as PairingBackend>::G1;
-/// type G2 = <BlstBackend as PairingBackend>::G2;
+/// let g1 = <PairingEngine as PairingBackend>::G1::generator();
+/// let g2 = <PairingEngine as PairingBackend>::G2::generator();
 ///
-/// let g1 = G1::generator();
-/// let g2 = G2::generator();
-///
-/// // Compute pairing
-/// let gt = BlstBackend::pairing(&g1, &g2);
-///
-/// // Target group operations
+/// let gt = PairingEngine::pairing(&g1, &g2);
 /// let gt_squared = gt.combine(&gt);
-/// # }
+/// println!("{:?}", gt_squared);
 /// ```
 pub trait TargetGroup: Clone + Send + Sync + Debug + 'static {
     /// Scalar field type for scalar multiplication.

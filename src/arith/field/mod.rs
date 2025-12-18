@@ -31,26 +31,21 @@ pub use ark_bn254::Fr;
 /// # Example
 ///
 /// ```rust,no_run
-/// # #[cfg(feature = "blst")]
-/// # {
-/// use tess::backend::{BlstBackend, PairingBackend, FieldElement};
 /// use rand::thread_rng;
-///
-/// type Scalar = <BlstBackend as PairingBackend>::Scalar;
+/// use tess::{FieldElement, Fr};
 ///
 /// let mut rng = thread_rng();
-/// let a = Scalar::random(&mut rng);
-/// let b = Scalar::random(&mut rng);
+/// let a = Fr::random(&mut rng);
+/// let b = Fr::random(&mut rng);
 ///
 /// // Field operations
-/// let zero = Scalar::zero();
-/// let one = Scalar::one();
+/// let zero = Fr::zero();
+/// let one = Fr::one();
 /// let inv = a.invert().expect("non-zero element");
 ///
 /// // Serialization
 /// let bytes = a.to_repr();
-/// let recovered = Scalar::from_repr(&bytes).expect("valid repr");
-/// # }
+/// let recovered = Fr::from_repr(&bytes).expect("valid repr");
 /// ```
 pub trait FieldElement: Clone + Send + Sync + Debug + 'static + Copy {
     /// Byte representation type (e.g., 32-byte array for bls12-381 scalars).

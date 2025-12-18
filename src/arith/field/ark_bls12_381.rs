@@ -43,24 +43,11 @@ impl FieldElement for Fr {
     }
 
     fn two_adic_root_of_unity() -> Self {
-        <Fr as FftField>::get_root_of_unity(1u64 << <Fr as FftField>::TWO_ADICITY)
-            .unwrap_or_else(<Fr as ArkOne>::one)
+        Fr::TWO_ADIC_ROOT_OF_UNITY
     }
 
     fn two_adicity_generator(n: usize) -> Self {
-        if n == 1 {
-            return <Fr as ArkOne>::one();
-        }
-
-        // Get the 2-adic root of unity and raise it to the appropriate power
-        let root = Self::two_adic_root_of_unity();
-        let k = (n - 1).next_power_of_two().trailing_zeros() as usize + 1;
-        let exp_power = (1u64 << k) / n as u64;
-
-        // Convert to [u64; 4] format for pow
-        let mut exp = [0u64; 4];
-        exp[0] = exp_power;
-        ark_ff::Field::pow(&root, &exp)
+        Fr::get_root_of_unity(n as u64).unwrap()
     }
 
     fn batch_inversion(elements: &mut [Self]) -> Result<(), BackendError> {

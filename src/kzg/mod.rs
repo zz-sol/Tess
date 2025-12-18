@@ -19,23 +19,15 @@ use crate::{BackendError, PairingBackend, Polynomial};
 ///
 /// # Example
 ///
-/// ```rust,no_run
-/// # #[cfg(feature = "blst")]
-/// # {
-/// use tess::backend::{BlstBackend, PairingBackend, FieldElement};
-/// use tess::{KZG, PolynomialCommitment};
-/// use rand::thread_rng;
+/// ```rust
+/// use rand_core::RngCore;
+/// use tess::{BackendError, Fr, KZG, PairingBackend, PolynomialCommitment};
 ///
-/// type Scalar = <BlstBackend as PairingBackend>::Scalar;
-///
-/// let mut rng = thread_rng();
-/// let tau = Scalar::random(&mut rng);
-/// let seed = tau.to_bytes_be();
-///
-/// // Setup commitment parameters (trusted setup)
-/// let params = <KZG as PolynomialCommitment<BlstBackend>>::setup(10, &seed)
-///     .expect("setup failed");
-/// # }
+/// fn setup<B: PairingBackend<Scalar = Fr>>(rng: &mut impl RngCore) -> Result<<KZG as PolynomialCommitment<B>>::Parameters, BackendError> {
+///     let mut seed = [0u8; 32];
+///     rng.fill_bytes(&mut seed);
+///     <KZG as PolynomialCommitment<B>>::setup(10, &seed)
+/// }
 /// ```
 pub trait PolynomialCommitment<B: PairingBackend>: Send + Sync + Debug + 'static {
     /// Commitment parameters (powers of tau).

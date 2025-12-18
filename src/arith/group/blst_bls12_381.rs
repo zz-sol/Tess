@@ -17,15 +17,6 @@
 //! # Feature
 //!
 //! Compiled when the Cargo feature `blst` is enabled.
-//!
-//! # Example
-//!
-//! ```rust,no_run
-//! # #[cfg(feature = "blst")]
-//! # {
-//! use tess::backend::BlstBackend;
-//! # }
-//! ```
 
 use std::io::Cursor;
 

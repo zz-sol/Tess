@@ -17,15 +17,7 @@
 //! # Feature
 //!
 //! Compiled when the Cargo feature `blst` is enabled.
-//!
-//! # Example
-//!
-//! ```rust,no_run
-//! # #[cfg(feature = "blst")]
-//! # {
-//! use tess::backend::BlstBackend;
-//! # }
-//! ```
+
 use blstrs::Scalar;
 use ff::Field;
 use ff::PrimeField;

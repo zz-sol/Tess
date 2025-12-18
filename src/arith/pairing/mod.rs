@@ -35,22 +35,14 @@ use crate::{BackendError, CurvePoint, FieldElement, TargetGroup};
 ///
 /// # Example
 ///
-/// ```rust,no_run
-/// # #[cfg(feature = "blst")]
-/// # {
-/// use tess::backend::{BlstBackend, PairingBackend, CurvePoint};
+/// ```rust
+/// use tess::{CurvePoint, PairingBackend, PairingEngine};
 ///
-/// // Access backend types
-/// type Scalar = <BlstBackend as PairingBackend>::Scalar;
-/// type G1 = <BlstBackend as PairingBackend>::G1;
-/// type G2 = <BlstBackend as PairingBackend>::G2;
+/// let g1 = <PairingEngine as PairingBackend>::G1::generator();
+/// let g2 = <PairingEngine as PairingBackend>::G2::generator();
 ///
-/// let g1 = G1::generator();
-/// let g2 = G2::generator();
-///
-/// // Compute pairing: e(G1, G2) -> GT
-/// let result = BlstBackend::pairing(&g1, &g2);
-/// # }
+/// let result = PairingEngine::pairing(&g1, &g2);
+/// println!("{:?}", result);
 /// ```
 pub trait PairingBackend: Send + Sync + Debug + Sized + 'static {
     /// Scalar field type (Fr).

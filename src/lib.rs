@@ -34,65 +34,14 @@
 //! ## Quick Example
 //!
 //! ```rust,no_run
-//! use tess::{ThresholdParameters, BackendConfig, CurveId, BackendId};
-//! use tess::protocol::{SilentThreshold, ThresholdEncryption};
-//! # #[cfg(feature = "blst")]
-//! use tess::backend::BlstBackend;
-//! # #[cfg(feature = "blst")]
-//! use rand::rngs::StdRng;
-//! # #[cfg(feature = "blst")]
-//! use rand::SeedableRng;
+//! use rand::thread_rng;
+//! use tess::{PairingEngine, SilentThresholdScheme};
 //!
-//! # #[cfg(feature = "blst")]
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! // Configure: 5 parties, threshold of 3, using blst backend with BLS12-381
-//! let params = ThresholdParameters::new(
-//!     5, 3,
-//!     BackendConfig { backend: BackendId::Blst, curve: CurveId::Bls12_381 },
-//! )?;
-//!
-//! // Create RNG and scheme instance
-//! let mut rng = StdRng::from_entropy();
-//! let scheme = SilentThreshold::<BlstBackend>::default();
-//!
-//! // Generate Structured Reference String (one-time trusted setup)
-//! let setup = scheme.param_gen(&mut rng, params.parties, params.threshold)?;
-//!
-//! // Generate key material for all participants
-//! let key_material = scheme.keygen(&mut rng, params.parties, &setup)?;
-//!
-//! // Encrypt a message
-//! let plaintext = b"Secret message";
-//! let ciphertext = scheme.encrypt(
-//!     &mut rng,
-//!     &key_material.aggregate_key,
-//!     params.threshold,
-//!     plaintext,
-//! )?;
-//!
-//! // Partial decryptions from threshold participants (e.g., first 3 parties)
-//! let mut selector = vec![false; params.parties];
-//! let mut partial_decryptions = Vec::new();
-//! for i in 0..params.threshold {
-//!     selector[i] = true;
-//!     let partial = scheme.partial_decrypt(
-//!         &key_material.secret_keys[i], &ciphertext,
-//!     )?;
-//!     partial_decryptions.push(partial);
-//! }
-//!
-//! // Aggregate to recover plaintext
-//! let result = scheme.aggregate_decrypt(
-//!     &ciphertext, &partial_decryptions, &selector, &key_material.aggregate_key,
-//! )?;
-//!
-//! assert_eq!(result.plaintext.as_deref(), Some(plaintext.as_slice()));
-//! # Ok(())
-//! # }
-//! # #[cfg(not(feature = "blst"))]
-//! # fn main() {}
+//! let mut rng = thread_rng();
+//! let scheme = SilentThresholdScheme::<PairingEngine>::new();
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
-//!
+
 //! ## Feature Flags
 //!
 //! TESS supports multiple cryptographic backends via feature flags:
@@ -103,23 +52,23 @@
 //!
 //! ## Protocol Workflow
 //!
-//! 1. **SRS Generation**: Generate a Structured Reference String using [`ThresholdEncryption::param_gen`].
+//! 1. **SRS Generation**: Generate a Structured Reference String using [`ThresholdScheme::param_gen`].
 //!    This is a one-time trusted setup that produces KZG commitment parameters.
 //!
-//! 2. **Key Generation**: Each participant generates keys using [`ThresholdEncryption::keygen`],
+//! 2. **Key Generation**: Each participant generates keys using [`ThresholdScheme::keygen`],
 //!    which produces a secret key and public key with Lagrange commitment hints.
 //!
-//! 3. **Key Aggregation**: Combine public keys using [`ThresholdEncryption::aggregate_public_key`]
+//! 3. **Key Aggregation**: Combine public keys using [`ThresholdScheme::aggregate_public_key`]
 //!    to create an aggregate key for encryption.
 //!
-//! 4. **Encryption**: Encrypt messages using [`ThresholdEncryption::encrypt`], which produces
+//! 4. **Encryption**: Encrypt messages using [`ThresholdScheme::encrypt`], which produces
 //!    a ciphertext with KZG proof and BLAKE3-encapsulated payload.
 //!
 //! 5. **Partial Decryption**: Each participant creates a decryption share using
-//!    [`ThresholdEncryption::partial_decrypt`].
+//!    [`ThresholdScheme::partial_decrypt`].
 //!
 //! 6. **Aggregate Decryption**: Combine at least `t` partial decryptions using
-//!    [`ThresholdEncryption::aggregate_decrypt`] to recover the plaintext.
+//!    [`ThresholdScheme::aggregate_decrypt`] to recover the plaintext.
 //!
 //! ## Performance
 //!
