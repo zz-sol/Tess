@@ -76,10 +76,20 @@ impl FieldElement for Scalar {
             return Scalar::ONE;
         }
 
-        // Get the 2-adic root of unity and raise it to the power of (2^k / n)
+        assert!(
+            n.is_power_of_two(),
+            "domain size must be a power of two for two-adicity generator"
+        );
+        let log_n = n.trailing_zeros() as usize;
+        let two_adicity = Scalar::S as usize;
+        assert!(
+            log_n <= two_adicity,
+            "requested domain exceeds scalar field two-adicity"
+        );
+
+        // Compute root^{2^{two_adicity - log_n}} to get an n-th root of unity.
+        let exp_power = 1u64 << (two_adicity - log_n);
         let root = Self::two_adic_root_of_unity();
-        let k = (n - 1).next_power_of_two().trailing_zeros() as usize + 1;
-        let exp_power = (1u64 << k) / n as u64;
 
         // Convert to [u64; 4] format for pow
         let mut exp = [0u64; 4];

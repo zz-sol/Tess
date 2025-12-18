@@ -21,5 +21,4 @@ use crate::{DensePolynomial, Fr, LagrangePowers, PairingBackend, SRS};
 pub struct Params<B: PairingBackend<Scalar = Fr>> {
     pub srs: SRS<B>,
     pub lagrange_powers: LagrangePowers<B>,
-    pub lagrange_polys: Vec<DensePolynomial>,
 }
