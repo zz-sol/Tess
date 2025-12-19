@@ -48,8 +48,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let share_count = THRESHOLD + 1;
     let mut selector = vec![false; PARTIES];
     let mut partials = Vec::with_capacity(share_count);
-    for i in 0..share_count {
-        selector[i] = true;
+    for (i, selected) in selector.iter_mut().enumerate().take(share_count) {
+        *selected = true;
         let p = scheme.partial_decrypt(&key_material.secret_keys[i], &ciphertext)?;
         partials.push(p);
     }

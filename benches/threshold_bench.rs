@@ -64,8 +64,8 @@ pub fn bench_threshold(c: &mut Criterion) {
     let share_count = threshold + 1;
     let mut partials = Vec::with_capacity(share_count);
     let mut selector = vec![false; parties];
-    for i in 0..share_count {
-        selector[i] = true;
+    for (i, selected) in selector.iter_mut().enumerate().take(share_count) {
+        *selected = true;
         let p = scheme
             .partial_decrypt(&key_material.secret_keys[i], &ct)
             .expect("partial_decrypt failed");
