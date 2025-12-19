@@ -1,4 +1,4 @@
-use crate::{DensePolynomial, Fr, LagrangePowers, PairingBackend, SRS};
+use crate::{Fr, LagrangePowers, PairingBackend, SRS};
 
 /// Structured Reference String for the threshold encryption scheme.
 ///

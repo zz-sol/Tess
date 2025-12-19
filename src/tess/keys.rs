@@ -3,10 +3,9 @@ use core::fmt::Debug;
 use tracing::instrument;
 
 use crate::{
-    DensePolynomial, FieldElement, Fr, KZG, PairingBackend, Params, Polynomial, SRS,
+    Fr, PairingBackend, Params, SRS,
     arith::CurvePoint,
     errors::{BackendError, Error},
-    kzg::PolynomialCommitment,
 };
 
 /// Secret key owned by a single participant.
@@ -81,6 +80,7 @@ pub struct AggregateKey<B: PairingBackend<Scalar = Fr>> {
     pub z_g2: B::G2,
     pub lagrange_row_sums: Vec<B::G1>,
     pub precomputed_pairing: B::Target,
+    pub kzg_params: SRS<B>,
 }
 
 impl<B: PairingBackend<Scalar = Fr>> AggregateKey<B> {
@@ -124,6 +124,7 @@ impl<B: PairingBackend<Scalar = Fr>> AggregateKey<B> {
             z_g2,
             lagrange_row_sums,
             precomputed_pairing: params.srs.e_gh.clone(),
+            kzg_params: params.srs.clone(),
         })
     }
 }
@@ -159,128 +160,26 @@ pub(crate) fn derive_public_key<B: PairingBackend<Scalar = Fr>>(
     sk: &SecretKey<B>,
     params: &Params<B>,
 ) -> Result<PublicKey<B>, BackendError> {
-    let lagrange_li = params
-        .lagrange_powers
-        .li
-        .get(participant_id)
-        .ok_or(BackendError::Math("missing lagrange power"))?
-        .mul_scalar(&sk.scalar);
-
-    let lagrange_li_minus0 = params
-        .lagrange_powers
-        .li_minus0
-        .get(participant_id)
-        .ok_or(BackendError::Math("missing lagrange power minus0"))?
-        .mul_scalar(&sk.scalar);
-
-    let lagrange_li_x = params
-        .lagrange_powers
-        .li_x
-        .get(participant_id)
-        .ok_or(BackendError::Math("missing lagrange power x"))?
-        .mul_scalar(&sk.scalar);
-
-    let domain_size = params.lagrange_polys.len();
-    if domain_size == 0 {
-        return Err(BackendError::Math("missing lagrange polynomials"));
+    let powers = &params.lagrange_powers;
+    if participant_id >= powers.li.len() {
+        return Err(BackendError::Math("participant id out of bounds"));
     }
 
-    let li_poly = params
-        .lagrange_polys
-        .get(participant_id)
-        .ok_or(BackendError::Math("missing lagrange polynomial"))?
-        .clone();
-
-    let mut sk_li_lj_z = Vec::with_capacity(domain_size);
-    for j in 0..domain_size {
-        let other_poly = params
-            .lagrange_polys
-            .get(j)
-            .ok_or(BackendError::Math("missing lagrange polynomial"))?;
-        let num = if participant_id == j {
-            poly_sub(&naive_poly_mul(&li_poly, &li_poly), &li_poly)
-        } else {
-            naive_poly_mul(&li_poly, other_poly)
-        };
-
-        let quotient = divide_by_vanishing_poly(&num, domain_size);
-        let sk_times_f = scale_poly(&quotient, &sk.scalar);
-        let commitment = KZG::commit_g1(&params.srs, &sk_times_f)?;
-        sk_li_lj_z.push(commitment);
-    }
-
-    let bls_pk = B::G1::generator().mul_scalar(&sk.scalar);
+    let bls_key = B::G1::generator().mul_scalar(&sk.scalar);
+    let lagrange_li = powers.li[participant_id].mul_scalar(&sk.scalar);
+    let lagrange_li_minus0 = powers.li_minus0[participant_id].mul_scalar(&sk.scalar);
+    let lagrange_li_x = powers.li_x[participant_id].mul_scalar(&sk.scalar);
+    let lagrange_li_lj_z = powers.li_lj_z[participant_id]
+        .iter()
+        .map(|elem| elem.mul_scalar(&sk.scalar))
+        .collect::<Vec<_>>();
 
     Ok(PublicKey {
         participant_id,
-        bls_key: bls_pk,
+        bls_key,
         lagrange_li,
         lagrange_li_minus0,
         lagrange_li_x,
-        lagrange_li_lj_z: sk_li_lj_z,
+        lagrange_li_lj_z,
     })
-}
-
-fn naive_poly_mul(lhs: &DensePolynomial, rhs: &DensePolynomial) -> DensePolynomial {
-    let left = lhs.coeffs();
-    let right = rhs.coeffs();
-    if left.is_empty() || right.is_empty() {
-        return DensePolynomial::from_coefficients_vec(vec![Fr::zero()]);
-    }
-
-    let mut product = vec![Fr::zero(); left.len() + right.len() - 1];
-    for (i, a) in left.iter().enumerate() {
-        for (j, b) in right.iter().enumerate() {
-            let term = (*a) * (*b);
-            product[i + j] += term;
-        }
-    }
-
-    DensePolynomial::from_coefficients_vec(product)
-}
-
-fn poly_sub(lhs: &DensePolynomial, rhs: &DensePolynomial) -> DensePolynomial {
-    let left = lhs.coeffs();
-    let right = rhs.coeffs();
-    let max_len = usize::max(left.len(), right.len());
-    let mut coeffs = Vec::with_capacity(max_len);
-    for i in 0..max_len {
-        let l = left.get(i).cloned().unwrap_or_else(Fr::zero);
-        let r = right.get(i).cloned().unwrap_or_else(Fr::zero);
-        coeffs.push(l - r);
-    }
-    DensePolynomial::from_coefficients_vec(coeffs)
-}
-
-fn divide_by_vanishing_poly(poly: &DensePolynomial, domain_size: usize) -> DensePolynomial {
-    let coeffs = poly.coeffs();
-    if coeffs.len() <= domain_size {
-        return DensePolynomial::from_coefficients_vec(vec![Fr::zero()]);
-    }
-
-    let mut quotient = coeffs[domain_size..].to_vec();
-    let len = coeffs.len();
-    for i in 1..(len / domain_size) {
-        let start = domain_size * (i + 1);
-        if start >= len {
-            break;
-        }
-
-        let remainder = &coeffs[start..];
-        let limit = quotient.len().min(remainder.len());
-        for idx in 0..limit {
-            quotient[idx] += remainder[idx];
-        }
-    }
-
-    DensePolynomial::from_coefficients_vec(quotient)
-}
-
-fn scale_poly(poly: &DensePolynomial, scalar: &Fr) -> DensePolynomial {
-    let scaled = poly
-        .coeffs()
-        .iter()
-        .map(|coeff| (*coeff) * (*scalar))
-        .collect();
-    DensePolynomial::from_coefficients_vec(scaled)
 }

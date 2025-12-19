@@ -25,8 +25,8 @@ use crate::PairingBackend;
 /// let mut rng = thread_rng();
 /// let scheme = SilentThresholdScheme::<PairingEngine>::new();
 ///
-/// let params = scheme.param_gen(&mut rng, 5, 3).unwrap();
-/// let keys = scheme.keygen(&mut rng, 5, &params).unwrap();
+/// let params = scheme.param_gen(&mut rng, 8, 4).unwrap();
+/// let keys = scheme.keygen(&mut rng, 8, &params).unwrap();
 ///
 /// // Encrypt a message
 /// let message = b"Secret threshold message";
@@ -34,12 +34,12 @@ use crate::PairingBackend;
 ///     &mut rng,
 ///     &keys.aggregate_key,
 ///     &params,
-///     3,
+///     4,
 ///     message
 /// ).unwrap();
 ///
 /// // Ciphertext contains encrypted payload and proofs
-/// assert_eq!(ciphertext.threshold, 3);
+/// assert_eq!(ciphertext.threshold, 4);
 /// assert!(!ciphertext.payload.is_empty());
 /// ```
 #[derive(Clone, Debug)]
@@ -71,9 +71,9 @@ pub struct Ciphertext<B: PairingBackend> {
 /// let mut rng = thread_rng();
 /// let scheme = SilentThresholdScheme::<PairingEngine>::new();
 ///
-/// let params = scheme.param_gen(&mut rng, 5, 3).unwrap();
-/// let keys = scheme.keygen(&mut rng, 5, &params).unwrap();
-/// let ciphertext = scheme.encrypt(&mut rng, &keys.aggregate_key,&params, 3, b"message").unwrap();
+/// let params = scheme.param_gen(&mut rng, 8, 4).unwrap();
+/// let keys = scheme.keygen(&mut rng, 8, &params).unwrap();
+/// let ciphertext = scheme.encrypt(&mut rng, &keys.aggregate_key,&params, 4, b"message").unwrap();
 ///
 /// // Each participant creates a partial decryption
 /// let partial = scheme.partial_decrypt(&keys.secret_keys[0], &ciphertext).unwrap();
@@ -112,16 +112,16 @@ impl<B: PairingBackend> Clone for PartialDecryption<B> {
 /// let mut rng = thread_rng();
 /// let scheme = SilentThresholdScheme::<PairingEngine>::new();
 ///
-/// let params = scheme.param_gen(&mut rng, 5, 3).unwrap();
-/// let keys = scheme.keygen(&mut rng, 5, &params).unwrap();
+/// let params = scheme.param_gen(&mut rng, 8, 4).unwrap();
+/// let keys = scheme.keygen(&mut rng, 8, &params).unwrap();
 ///
 /// let message = b"Threshold encrypted message";
-/// let ciphertext = scheme.encrypt(&mut rng, &keys.aggregate_key, &params, 3, message).unwrap();
+/// let ciphertext = scheme.encrypt(&mut rng, &keys.aggregate_key, &params, 4, message).unwrap();
 ///
-/// // Collect 3 partial decryptions
-/// let mut selector = vec![false; 5];
+/// // Collect 5 partial decryptions (t + 1)
+/// let mut selector = vec![false; 8];
 /// let mut partials = Vec::new();
-/// for i in 0..3 {
+/// for i in 0..5 {
 ///     selector[i] = true;
 ///     partials.push(scheme.partial_decrypt(&keys.secret_keys[i], &ciphertext).unwrap());
 /// }

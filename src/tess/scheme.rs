@@ -11,12 +11,16 @@ use crate::{
     DecryptionResult,
     DensePolynomial,
     Fr,
+    KZG,
     KeyMaterial,
     LagrangePowers,
     PairingBackend,
     Params,
     PartialDecryption,
+    Polynomial,
+    PolynomialCommitment,
     PublicKey,
+    Radix2EvaluationDomain,
     SRS,
     SecretKey,
     TargetGroup,
@@ -78,14 +82,19 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
         parties: usize,
         threshold: usize,
     ) -> Result<Params<B>, Error> {
-        if parties < threshold {
+        if threshold >= parties {
             return Err(Error::InvalidConfig(
-                "threshold must be less than or equal to parties".into(),
+                "threshold must be less than parties".into(),
             ));
         }
         if threshold == 0 {
             return Err(Error::InvalidConfig(
                 "threshold must be greater than 0".into(),
+            ));
+        }
+        if !parties.is_power_of_two() {
+            return Err(Error::InvalidConfig(
+                "parties must be a power of two".into(),
             ));
         }
 
@@ -110,7 +119,6 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
         Ok(Params {
             srs,
             lagrange_powers,
-            lagrange_polys: lagranges,
         })
     }
 
@@ -156,6 +164,17 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
         threshold: usize,
         payload: &[u8],
     ) -> Result<Ciphertext<B>, Error> {
+        if threshold == 0 {
+            return Err(Error::InvalidConfig(
+                "threshold must be greater than 0".into(),
+            ));
+        }
+        if threshold + 1 >= params.srs.powers_of_g.len() {
+            return Err(Error::InvalidConfig(
+                "threshold exceeds available SRS powers".into(),
+            ));
+        }
+
         let g = B::G1::generator();
         let h = B::G2::generator();
 
@@ -207,17 +226,9 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
         // Compute shared secret from s4 and pairing
         // enc_key = e_gh^s4
         let shared_secret = agg_key.precomputed_pairing.mul_scalar(&s4);
+        let payload_key = derive_payload_key::<B>(&shared_secret);
 
-        // Use a hash of s4 for payload encryption
-        let mut hasher = Hasher::new();
-        hasher.update(b"shared_secret");
-        let s4_bytes = format!("{:?}", s4).into_bytes(); // todo: serialization
-        hasher.update(&s4_bytes);
-        let secret_bytes = hasher.finalize().as_bytes().to_vec();
-
-        let payload_ct = self
-            .symmetric_enc
-            .encrypt(&secret_bytes[..32.min(secret_bytes.len())], payload)?;
+        let payload_ct = self.symmetric_enc.encrypt(&payload_key, payload)?;
 
         Ok(Ciphertext {
             gamma_g2,
@@ -264,14 +275,31 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
             });
         }
 
-        if selector.len() != agg_key.public_keys.len() {
+        let parties = agg_key.public_keys.len();
+        if parties == 0 {
+            return Err(Error::InvalidConfig("require at least one party".into()));
+        }
+        if !parties.is_power_of_two() {
+            return Err(Error::InvalidConfig(
+                "parties must be a power of two".into(),
+            ));
+        }
+        if selector.len() != parties {
             return Err(Error::SelectorMismatch {
-                expected: agg_key.public_keys.len(),
+                expected: parties,
                 actual: selector.len(),
             });
         }
-
-        let parties = agg_key.public_keys.len();
+        if !selector[0] {
+            return Err(Error::MalformedInput(
+                "selector[0] must be true to anchor interpolation".into(),
+            ));
+        }
+        if ciphertext.proof_g1.len() != 2 || ciphertext.proof_g2.len() != 6 {
+            return Err(Error::MalformedInput(
+                "ciphertext proof sizes are invalid".into(),
+            ));
+        }
 
         let mut partial_map: Vec<Option<&PartialDecryption<B>>> = vec![None; parties];
         for partial in partials {
@@ -280,15 +308,21 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
             }
         }
 
-        let domain_elements = build_domain_elements(parties)?;
-        let mut points = Vec::with_capacity(parties);
-        points.push(domain_elements[0]);
+        let domain = Radix2EvaluationDomain::new(parties)
+            .ok_or_else(|| Error::InvalidConfig("invalid evaluation domain size".into()))?;
+        let domain_elements = domain.elements();
 
+        let mut points = vec![domain_elements[0]];
         let mut selected_indices = Vec::new();
-        for (idx, &is_selected) in selector.iter().enumerate().take(parties) {
-            if is_selected && partial_map[idx].is_some() {
+        for (idx, &is_selected) in selector.iter().enumerate() {
+            if is_selected {
+                if partial_map[idx].is_none() {
+                    return Err(Error::MalformedInput(
+                        "missing partial decryption for selected party".into(),
+                    ));
+                }
                 selected_indices.push(idx);
-            } else if !is_selected {
+            } else {
                 points.push(domain_elements[idx]);
             }
         }
@@ -301,61 +335,117 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
         }
 
         let b_polynomial = interp_mostly_zero(Fr::one(), &points)?;
-        let b_evals: Vec<Fr> = domain_elements
-            .iter()
-            .map(|point| b_polynomial.evaluate(point))
-            .collect();
+        let b_evals: Vec<Fr> = domain.fft(b_polynomial.coeffs());
 
         let scalars: Vec<Fr> = selected_indices.iter().map(|&idx| b_evals[idx]).collect();
 
-        let mut aggregated_response = B::G2::identity();
-        for (&idx, scalar) in selected_indices.iter().zip(scalars.iter()) {
-            if let Some(partial) = partial_map[idx] {
-                aggregated_response = aggregated_response.add(&partial.response.mul_scalar(scalar));
-            }
+        let b_g2 = <KZG as PolynomialCommitment<B>>::commit_g2(&agg_key.kzg_params, &b_polynomial)
+            .map_err(Error::Backend)?;
+
+        let mut bminus1 = b_polynomial.clone();
+        if let Some(constant) = bminus1.coeffs.get_mut(0) {
+            *constant -= Fr::one();
         }
+        let (q0, remainder) = bminus1.divide_by_linear(domain_elements[0]);
+        if remainder != Fr::zero() {
+            return Err(Error::MalformedInput(
+                "b polynomial division by anchor has non-zero remainder".into(),
+            ));
+        }
+        let q0_g1 = <KZG as PolynomialCommitment<B>>::commit_g1(&agg_key.kzg_params, &q0)
+            .map_err(Error::Backend)?;
+
+        let mut bhat_coeffs = vec![Fr::zero(); ciphertext.threshold + 1];
+        bhat_coeffs.extend_from_slice(b_polynomial.coeffs());
+        let bhat = DensePolynomial::from_coefficients_vec(bhat_coeffs);
+        let bhat_g1 = <KZG as PolynomialCommitment<B>>::commit_g1(&agg_key.kzg_params, &bhat)
+            .map_err(Error::Backend)?;
 
         let party_inv = Fr::from_u64(parties as u64).invert().ok_or_else(|| {
             Error::Backend(BackendError::Math("failed to invert party count".into()))
         })?;
-        let aggregated_response = aggregated_response.mul_scalar(&party_inv);
 
-        // let matches_gamma = aggregated_response == ciphertext.gamma_g2;
-        // dbg!(matches_gamma);
+        let apk = if scalars.is_empty() {
+            B::G1::identity()
+        } else {
+            let bases: Vec<B::G1> = selected_indices
+                .iter()
+                .map(|&idx| agg_key.public_keys[idx].bls_key)
+                .collect();
+            B::G1::multi_scalar_multipliation(&bases, &scalars).mul_scalar(&party_inv)
+        };
 
-        let recovered = B::pairing(&agg_key.ask, &aggregated_response);
-        assert_eq!(recovered, ciphertext.shared_secret);
+        let sigma = if scalars.is_empty() {
+            B::G2::identity()
+        } else {
+            let bases: Vec<B::G2> = selected_indices
+                .iter()
+                .map(|&idx| partial_map[idx].unwrap().response)
+                .collect();
+            B::G2::multi_scalar_multipliation(&bases, &scalars).mul_scalar(&party_inv)
+        };
 
-        // Use a hash of the pairing result for decryption (placeholder)
-        let mut hasher = Hasher::new();
-        hasher.update(b"recovered_secret");
-        let secret_bytes = hasher.finalize().as_bytes().to_vec();
+        let qx = if scalars.is_empty() {
+            B::G1::identity()
+        } else {
+            let points: Vec<B::G1> = selected_indices
+                .iter()
+                .map(|&idx| agg_key.public_keys[idx].lagrange_li_x)
+                .collect();
+            B::G1::multi_scalar_multipliation(&points, &scalars)
+        };
 
-        let plaintext = self.symmetric_enc.decrypt(
-            &secret_bytes[..32.min(secret_bytes.len())],
-            &ciphertext.payload,
-        )?;
+        let qz = if scalars.is_empty() {
+            B::G1::identity()
+        } else {
+            let points: Vec<B::G1> = selected_indices
+                .iter()
+                .map(|&idx| agg_key.lagrange_row_sums[idx])
+                .collect();
+            B::G1::multi_scalar_multipliation(&points, &scalars)
+        };
+
+        let qhatx = if scalars.is_empty() {
+            B::G1::identity()
+        } else {
+            let points: Vec<B::G1> = selected_indices
+                .iter()
+                .map(|&idx| agg_key.public_keys[idx].lagrange_li_minus0)
+                .collect();
+            B::G1::multi_scalar_multipliation(&points, &scalars)
+        };
+
+        let w1 = [
+            apk.negate(),
+            qz.negate(),
+            qx.negate(),
+            qhatx,
+            bhat_g1.negate(),
+            q0_g1.negate(),
+        ];
+        let w2 = [b_g2, sigma];
+
+        let mut enc_key_lhs = w1.to_vec();
+        enc_key_lhs.extend_from_slice(&ciphertext.proof_g1);
+        let mut enc_key_rhs = ciphertext.proof_g2.clone();
+        enc_key_rhs.extend_from_slice(&w2);
+
+        let enc_key = B::multi_pairing(&enc_key_lhs, &enc_key_rhs).map_err(Error::Backend)?;
+        if enc_key != ciphertext.shared_secret {
+            return Err(Error::MalformedInput(
+                "ciphertext verification failed".into(),
+            ));
+        }
+
+        let payload_key = derive_payload_key::<B>(&enc_key);
+        let plaintext = self
+            .symmetric_enc
+            .decrypt(&payload_key, &ciphertext.payload)?;
 
         Ok(DecryptionResult {
             plaintext: Some(plaintext),
         })
     }
-}
-
-fn build_domain_elements(parties: usize) -> Result<Vec<Fr>, Error> {
-    if parties == 0 {
-        return Err(Error::InvalidConfig("require at least one party".into()));
-    }
-
-    let omega = Fr::two_adicity_generator(parties);
-    let mut elements = Vec::with_capacity(parties);
-    let mut current = Fr::one();
-    for _ in 0..parties {
-        elements.push(current);
-        current = current * omega;
-    }
-
-    Ok(elements)
 }
 
 fn interp_mostly_zero(eval: Fr, points: &[Fr]) -> Result<DensePolynomial, Error> {
@@ -394,4 +484,15 @@ fn interp_mostly_zero(eval: Fr, points: &[Fr]) -> Result<DensePolynomial, Error>
     }
 
     Ok(DensePolynomial::from_coefficients_vec(coeffs))
+}
+
+fn derive_payload_key<B: PairingBackend>(enc_key: &B::Target) -> [u8; 32] {
+    let mut hasher = Hasher::new();
+    hasher.update(b"tess::payload-key");
+    let repr = enc_key.to_repr();
+    hasher.update(repr.as_ref());
+    let digest = hasher.finalize();
+    let mut key = [0u8; 32];
+    key.copy_from_slice(digest.as_bytes());
+    key
 }
