@@ -212,6 +212,8 @@ impl<B: PairingBackend<Scalar = Fr>> SRS<B> {
             .collect();
 
         let e_gh = B::pairing(&g, &h);
+        cur = B::Scalar::zero();
+        wipe_scalars(&mut powers_of_tau);
 
         Ok(SRS {
             powers_of_g,
@@ -227,8 +229,10 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
 
     fn setup(max_degree: usize, seed: &[u8; 32]) -> Result<Self::Parameters, BackendError> {
         let mut rng = ChaCha20Rng::from_seed(*seed);
-        let tau = Fr::random(&mut rng);
-        SRS::new_unsafe(&tau, max_degree).map_err(BackendError::Other)
+        let mut tau = Fr::random(&mut rng);
+        let result = SRS::new_unsafe(&tau, max_degree).map_err(BackendError::Other);
+        tau = Fr::zero();
+        result
     }
 
     fn commit_g1(
@@ -255,5 +259,11 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
         let scalars = &polynomial.coeffs()[..=degree];
         let commitment = B::G2::multi_scalar_multipliation(&params.powers_of_h[..=degree], scalars);
         Ok(commitment)
+    }
+}
+
+fn wipe_scalars<F: FieldElement>(scalars: &mut [F]) {
+    for scalar in scalars {
+        *scalar = F::zero();
     }
 }

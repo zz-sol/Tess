@@ -34,7 +34,9 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
+use rayon::prelude::*;
 use tracing::instrument;
+use zeroize::Zeroize;
 
 use crate::{
     Fr, PairingBackend, Params, SRS,
@@ -57,6 +59,18 @@ pub struct SecretKey<B: PairingBackend> {
     pub participant_id: usize,
     /// Secret scalar share for this participant.
     pub scalar: B::Scalar,
+}
+
+impl<B: PairingBackend> Zeroize for SecretKey<B> {
+    fn zeroize(&mut self) {
+        self.scalar = B::Scalar::zero();
+    }
+}
+
+impl<B: PairingBackend> Drop for SecretKey<B> {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
 }
 
 /// Public key with Lagrange commitment hints for efficient verification.
@@ -103,6 +117,77 @@ impl<B: PairingBackend> Clone for PublicKey<B> {
     }
 }
 
+impl<B: PairingBackend<Scalar = Fr>> SecretKey<B> {
+    /// Derives a public key from a secret key using precomputed Lagrange commitments.
+    ///
+    /// This function computes the participant's public key by multiplying the precomputed
+    /// Lagrange polynomial commitments from the SRS with the participant's secret scalar.
+    /// This enables efficient key generation without requiring polynomial operations.
+    ///
+    /// # Silent Key Generation
+    ///
+    /// The key derivation is "silent" because it only requires:
+    /// - The participant's secret scalar
+    /// - The public SRS parameters
+    ///
+    /// No interaction with other participants is needed, allowing fully independent
+    /// key generation.
+    ///
+    /// # Computed Values
+    ///
+    /// The public key contains:
+    /// - **bls_key**: g^s where s is the secret scalar (standard BLS public key)
+    /// - **lagrange_li**: Commitment to s·L_i(x)
+    /// - **lagrange_li_minus0**: Commitment to s·(L_i(x) - L_i(0))
+    /// - **lagrange_li_x**: Commitment to s·x·L_i(x)
+    /// - **lagrange_li_lj_z**: Commitments to s·L_i(x)·L_j(z) for all j
+    ///
+    /// These precomputed values enable O(1) verification during decryption instead
+    /// of O(n) polynomial interpolation.
+    ///
+    /// # Arguments
+    ///
+    /// * `participant_id` - The participant's unique identifier (0-indexed)
+    /// * `sk` - The participant's secret key
+    /// * `params` - Public parameters containing precomputed Lagrange commitments
+    ///
+    /// # Returns
+    ///
+    /// The derived public key, or an error if the participant ID is out of bounds
+    ///
+    /// # Errors
+    ///
+    /// Returns `BackendError::Math` if `participant_id >= params.lagrange_powers.li.len()`
+    #[instrument(level = "trace", skip_all, fields(participant_id))]
+    pub(crate) fn derive_public_key(
+        &self,
+        params: &Params<B>,
+    ) -> Result<PublicKey<B>, BackendError> {
+        let powers = &params.lagrange_powers;
+        if self.participant_id >= powers.li.len() {
+            return Err(BackendError::Math("participant id out of bounds"));
+        }
+
+        let bls_key = B::G1::generator().mul_scalar(&self.scalar);
+        let lagrange_li = powers.li[self.participant_id].mul_scalar(&self.scalar);
+        let lagrange_li_minus0 = powers.li_minus0[self.participant_id].mul_scalar(&self.scalar);
+        let lagrange_li_x = powers.li_x[self.participant_id].mul_scalar(&self.scalar);
+        let lagrange_li_lj_z = powers.li_lj_z[self.participant_id]
+            .iter()
+            .map(|elem| elem.mul_scalar(&self.scalar))
+            .collect::<Vec<_>>();
+
+        Ok(PublicKey {
+            participant_id: self.participant_id,
+            bls_key,
+            lagrange_li,
+            lagrange_li_minus0,
+            lagrange_li_x,
+            lagrange_li_lj_z,
+        })
+    }
+}
+
 /// Aggregate public key for encryption and verification.
 ///
 /// This structure contains the aggregated public keys and precomputed values
@@ -132,7 +217,7 @@ pub struct AggregateKey<B: PairingBackend<Scalar = Fr>> {
 }
 
 impl<B: PairingBackend<Scalar = Fr>> AggregateKey<B> {
-    #[instrument(level = "trace", skip_all, fields(parties, num_keys = public_keys.len()))]
+    #[instrument(level = "info", skip_all, fields(parties, num_keys = public_keys.len()))]
     pub(crate) fn aggregate_keys(
         public_keys: &[PublicKey<B>],
         params: &Params<B>,
@@ -147,19 +232,23 @@ impl<B: PairingBackend<Scalar = Fr>> AggregateKey<B> {
             return Err(Error::InvalidConfig("public key length mismatch".into()));
         }
 
-        let mut ask = B::G1::identity();
-        for pk in public_keys {
-            ask = ask.add(&pk.lagrange_li);
-        }
+        let ask = public_keys
+            .par_iter()
+            .map(|pk| pk.lagrange_li)
+            .reduce(B::G1::identity, |acc, val| acc.add(&val));
 
-        let mut lagrange_row_sums = vec![B::G1::identity(); parties];
-        for (idx, row) in lagrange_row_sums.iter_mut().enumerate() {
-            for pk in public_keys {
-                if let Some(val) = pk.lagrange_li_lj_z.get(idx) {
-                    *row = row.add(val);
+        let lagrange_row_sums: Vec<B::G1> = (0..parties)
+            .into_par_iter()
+            .map(|idx| {
+                let mut row = B::G1::identity();
+                for pk in public_keys {
+                    if let Some(val) = pk.lagrange_li_lj_z.get(idx) {
+                        row = row.add(val);
+                    }
                 }
-            }
-        }
+                row
+            })
+            .collect();
 
         let g2_gen = params.srs.powers_of_h[0];
         // h * tau^n is available at index `parties` in the SRS
@@ -204,74 +293,4 @@ pub struct KeyMaterial<B: PairingBackend<Scalar = Fr>> {
     pub aggregate_key: AggregateKey<B>,
     /// KZG commitment parameters.
     pub kzg_params: SRS<B>,
-}
-
-/// Derives a public key from a secret key using precomputed Lagrange commitments.
-///
-/// This function computes the participant's public key by multiplying the precomputed
-/// Lagrange polynomial commitments from the SRS with the participant's secret scalar.
-/// This enables efficient key generation without requiring polynomial operations.
-///
-/// # Silent Key Generation
-///
-/// The key derivation is "silent" because it only requires:
-/// - The participant's secret scalar
-/// - The public SRS parameters
-///
-/// No interaction with other participants is needed, allowing fully independent
-/// key generation.
-///
-/// # Computed Values
-///
-/// The public key contains:
-/// - **bls_key**: g^s where s is the secret scalar (standard BLS public key)
-/// - **lagrange_li**: Commitment to s·L_i(x)
-/// - **lagrange_li_minus0**: Commitment to s·(L_i(x) - L_i(0))
-/// - **lagrange_li_x**: Commitment to s·x·L_i(x)
-/// - **lagrange_li_lj_z**: Commitments to s·L_i(x)·L_j(z) for all j
-///
-/// These precomputed values enable O(1) verification during decryption instead
-/// of O(n) polynomial interpolation.
-///
-/// # Arguments
-///
-/// * `participant_id` - The participant's unique identifier (0-indexed)
-/// * `sk` - The participant's secret key
-/// * `params` - Public parameters containing precomputed Lagrange commitments
-///
-/// # Returns
-///
-/// The derived public key, or an error if the participant ID is out of bounds
-///
-/// # Errors
-///
-/// Returns `BackendError::Math` if `participant_id >= params.lagrange_powers.li.len()`
-#[instrument(level = "trace", skip_all, fields(participant_id))]
-pub(crate) fn derive_public_key<B: PairingBackend<Scalar = Fr>>(
-    participant_id: usize,
-    sk: &SecretKey<B>,
-    params: &Params<B>,
-) -> Result<PublicKey<B>, BackendError> {
-    let powers = &params.lagrange_powers;
-    if participant_id >= powers.li.len() {
-        return Err(BackendError::Math("participant id out of bounds"));
-    }
-
-    let bls_key = B::G1::generator().mul_scalar(&sk.scalar);
-    let lagrange_li = powers.li[participant_id].mul_scalar(&sk.scalar);
-    let lagrange_li_minus0 = powers.li_minus0[participant_id].mul_scalar(&sk.scalar);
-    let lagrange_li_x = powers.li_x[participant_id].mul_scalar(&sk.scalar);
-    let lagrange_li_lj_z = powers.li_lj_z[participant_id]
-        .iter()
-        .map(|elem| elem.mul_scalar(&sk.scalar))
-        .collect::<Vec<_>>();
-
-    Ok(PublicKey {
-        participant_id,
-        bls_key,
-        lagrange_li,
-        lagrange_li_minus0,
-        lagrange_li_x,
-        lagrange_li_lj_z,
-    })
 }

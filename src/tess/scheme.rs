@@ -94,7 +94,6 @@ use crate::{
     build_lagrange_polys,
     errors::{BackendError, Error},
     sym_enc::{Blake3XorEncryption, SymmetricEncryption},
-    tess::keys::derive_public_key,
 };
 
 /// The Silent Threshold scheme implementation.
@@ -177,28 +176,32 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
             ));
         }
 
-        let tau = B::Scalar::random(rng);
+        let mut tau = B::Scalar::random(rng);
+        let result = (|| {
+            let srs = SRS::new_unsafe(&tau, parties).map_err(|e| {
+                Error::Backend(BackendError::Other(format!("SRS generation failed: {}", e)))
+            })?;
 
-        let srs = SRS::new_unsafe(&tau, parties).map_err(|e| {
-            Error::Backend(BackendError::Other(format!("SRS generation failed: {}", e)))
-        })?;
+            // Build Lagrange polynomials for the evaluation domain of size `parties`.
+            let lagranges = build_lagrange_polys(parties).map_err(|e| {
+                Error::Backend(BackendError::Other(format!(
+                    "Lagrange polynomials failed: {}",
+                    e
+                )))
+            })?;
 
-        // Build Lagrange polynomials for the evaluation domain of size `parties`.
-        let lagranges = build_lagrange_polys(parties).map_err(|e| {
-            Error::Backend(BackendError::Other(format!(
-                "Lagrange polynomials failed: {}",
-                e
-            )))
-        })?;
+            // Precompute Lagrange powers (commitments) using the arith helper.
+            let lagrange_powers =
+                LagrangePowers::precompute_lagrange_powers(&lagranges, parties, &tau)
+                    .map_err(Error::Backend)?;
 
-        // Precompute Lagrange powers (commitments) using the arith helper.
-        let lagrange_powers = LagrangePowers::precompute_lagrange_powers(&lagranges, parties, &tau)
-            .map_err(Error::Backend)?;
-
-        Ok(Params {
-            srs,
-            lagrange_powers,
-        })
+            Ok(Params {
+                srs,
+                lagrange_powers,
+            })
+        })();
+        tau = B::Scalar::zero();
+        result
     }
 
     #[instrument(level = "info", skip_all, fields(parties))]
@@ -212,7 +215,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
 
         let public_keys = secret_keys
             .par_iter()
-            .map(|sk| derive_public_key::<B>(sk.participant_id, sk, params))
+            .map(|sk| sk.derive_public_key(params))
             .collect::<Result<Vec<_>, BackendError>>()?;
 
         let aggregate_key = AggregateKey::aggregate_keys(&public_keys, params, parties)?;
@@ -446,6 +449,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
                 .ok_or(Error::Backend(BackendError::Math(
                     "failed to invert party count",
                 )))?;
+        let scaled_scalars: Vec<Fr> = scalars.iter().map(|scalar| *scalar * party_inv).collect();
 
         let apk = if scalars.is_empty() {
             B::G1::identity()
@@ -454,7 +458,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
                 .iter()
                 .map(|&idx| agg_key.public_keys[idx].bls_key)
                 .collect();
-            B::G1::multi_scalar_multipliation(&bases, &scalars).mul_scalar(&party_inv)
+            B::G1::multi_scalar_multipliation(&bases, &scaled_scalars)
         };
 
         let sigma = if scalars.is_empty() {
@@ -464,7 +468,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
                 .iter()
                 .map(|&idx| partial_map[idx].unwrap().response)
                 .collect();
-            B::G2::multi_scalar_multipliation(&bases, &scalars).mul_scalar(&party_inv)
+            B::G2::multi_scalar_multipliation(&bases, &scaled_scalars)
         };
 
         let qx = if scalars.is_empty() {

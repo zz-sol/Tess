@@ -988,6 +988,7 @@ dependencies = [
  "serde",
  "tracing",
  "tracing-subscriber",
+ "zeroize",
 ]
 
 [[package]]
