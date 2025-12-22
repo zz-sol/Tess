@@ -15,6 +15,7 @@
 //! - Aggregate signature verification
 //! - Zero-knowledge proof verification
 
+use alloc::vec::Vec;
 use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
 

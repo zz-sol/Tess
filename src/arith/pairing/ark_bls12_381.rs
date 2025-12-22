@@ -15,6 +15,7 @@
 //! - Aggregate signature verification
 //! - Zero-knowledge proof verification
 
+use alloc::vec::Vec;
 use ark_bls12_381::Bls12_381;
 use ark_ec::pairing::Pairing;
 

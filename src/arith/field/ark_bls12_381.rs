@@ -13,6 +13,7 @@
 //! The Arkworks implementation is pure Rust and provides good portability.
 //! For maximum performance, consider using the `blst` feature instead.
 
+use alloc::vec::Vec;
 use ark_bls12_381::Fr as ArkFr;
 use ark_ff::{FftField, Field, One as ArkOne, UniformRand, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};

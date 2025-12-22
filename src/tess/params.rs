@@ -51,6 +51,8 @@ use crate::{Fr, LagrangePowers, PairingBackend, SRS};
 /// via a secure multi-party computation ceremony.
 #[derive(Clone, Debug)]
 pub struct Params<B: PairingBackend<Scalar = Fr>> {
+    /// KZG structured reference string parameters.
     pub srs: SRS<B>,
+    /// Precomputed Lagrange polynomial commitments.
     pub lagrange_powers: LagrangePowers<B>,
 }

@@ -13,6 +13,7 @@
 //! BN254 is a pairing-friendly curve that offers a different security/performance
 //! tradeoff compared to BLS12-381. It provides approximately 100 bits of security.
 
+use alloc::vec::Vec;
 use ark_bn254::Fr as ArkFr;
 use ark_ff::{FftField, Field, One as ArkOne, UniformRand, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};

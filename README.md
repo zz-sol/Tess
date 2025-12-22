@@ -4,20 +4,17 @@
 [![Documentation](https://docs.rs/tess/badge.svg)](https://docs.rs/tess)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 
-A production-grade Rust implementation of threshold encryption with silent (non-interactive) setup based on Knowledge of Exponent (KZG) commitments.
+A production-grade Rust implementation of threshold encryption with silent (non-interactive) setup, built on Knowledge of Exponent (KZG) commitments.
 
 ## Overview
 
-Threshold encryption allows a message to be encrypted such that it can only be decrypted when at least `t` out of `n` participants cooperate. TESS implements this using a **silent setup**, meaning the initial setup does not require interactive communication between participants.
+Threshold encryption allows a message to be encrypted so it can only be decrypted when at least `t` out of `n` participants cooperate. TESS implements this using a **silent setup**, meaning the initial setup does not require interactive communication between participants.
 
 ### Key Features
 
 - **Non-interactive Setup**: Silent setup eliminates the need for participant coordination during initialization
 - **KZG-based**: Leverages Knowledge of Exponent commitments for efficient polynomial operations
 - **Multiple Backend Support**: Choose between BLS12-381 (via blstrs or Arkworks) and BN254 (via Arkworks)
-- **High Performance**: Parallelized operations using Rayon for MSM, key generation, and FFT
-- **Type-Safe**: Strongly typed API with compile-time backend selection
-- **Production Ready**: Comprehensive error handling and instrumentation support
 
 ## Installation
 
@@ -33,8 +30,8 @@ tess = "0.1"
 TESS supports multiple cryptographic backends:
 
 - **`blst`** (default): blstrs backend for BLS12-381 - fastest and recommended for production
-- **`ark_bls12381`**: Arkworks backend for BLS12-381 - more portable, pure Rust
-- **`ark_bn254`**: Arkworks backend for BN254 - alternative curve option
+- **`ark_bls12381`**: Arkworks backend for BLS12-381
+- **`ark_bn254`**: Arkworks backend for BN254
 
 To use a different backend:
 
@@ -108,13 +105,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Protocol Workflow
 
-1. **SRS Generation** (`param_gen`): Generate a Structured Reference String using a trusted setup. This produces KZG commitment parameters and precomputed Lagrange polynomial commitments.
+1. **SRS Generation** (`param_gen`): Generate a Structured Reference String using a trusted setup. This produces KZG commitment parameters and precomputed Lagrange polynomial commitments. Internally it generates a toxic waste `tau` and Lagrange coefficients derived from `tau`. It is critical that these parameters are not leaked. See the security considerations section.
 
 2. **Key Generation** (`keygen`): Each participant generates a secret key share and corresponding public key with Lagrange commitment hints. Keys are generated independently without interaction.
 
 3. **Key Aggregation**: Public keys are combined to create an aggregate public key used for encryption.
 
-4. **Encryption** (`encrypt`): Messages are encrypted using the aggregate public key, producing a ciphertext with KZG proof and BLAKE3-encrypted payload.
+4. **Encryption** (`encrypt`): Messages are encrypted using the aggregate public key, producing a ciphertext with a KZG proof and a BLAKE3-encrypted payload.
 
 5. **Partial Decryption** (`partial_decrypt`): Each participant creates a decryption share using their secret key.
 
@@ -150,29 +147,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Basic Usage
 
-See [`examples/threshold_example.rs`](examples/threshold_example.rs) for a complete example with 2048 participants and threshold of 1400.
+See [`examples/threshold_example.rs`](examples/threshold_example.rs) for a complete example with 2048 participants and a threshold of 1400.
 
-Run it with:
+Run with:
 ```bash
 cargo run --example threshold_example --release
-```
-
-### Choosing Different Backends
-
-```rust
-// Using blst (default)
-use tess::{PairingEngine, SilentThresholdScheme};
-let scheme = SilentThresholdScheme::<PairingEngine>::new();
-
-// Using Arkworks BLS12-381
-#[cfg(feature = "ark_bls12381")]
-use tess::{ArkBls12381Backend, SilentThresholdScheme};
-let scheme = SilentThresholdScheme::<ArkBls12381Backend>::new();
-
-// Using Arkworks BN254
-#[cfg(feature = "ark_bn254")]
-use tess::{ArkBn254Backend, SilentThresholdScheme};
-let scheme = SilentThresholdScheme::<ArkBn254Backend>::new();
 ```
 
 ### With Tracing
@@ -192,26 +171,12 @@ let params = scheme.param_gen(&mut rng, PARTIES, THRESHOLD)?;
 
 ## Performance
 
-TESS leverages Rayon for parallel processing in performance-critical operations:
-
-- **Multi-scalar multiplication (MSM)**: Parallelized across CPU cores
-- **Key generation**: Parallel computation of key shares
-- **FFT operations**: Parallel polynomial arithmetic using Radix-2 FFT
-- **Lagrange precomputation**: Parallel polynomial basis construction
-
 ### Benchmarks
 
-Run benchmarks with:
+Run with:
 ```bash
 cargo bench --bench threshold_bench
 ```
-
-Expected performance on modern hardware (2048 participants, threshold 1400):
-- Parameter generation: ~5-10 seconds
-- Key generation: ~3-6 seconds
-- Encryption: ~100-200ms
-- Partial decryption: ~5-10ms per share
-- Aggregate decryption: ~200-400ms
 
 ## Security Considerations
 
@@ -264,18 +229,15 @@ cargo test
 
 # Run tests with specific backend
 cargo test --no-default-features --features ark_bls12381
-
-# Run with verbose output
-cargo test -- --nocapture
 ```
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+Contributions are welcome. Please submit a pull request. For major changes, open an issue first to discuss what you would like to change.
 
 ## Acknowledgments
 
-This implementation is based on the research paper:
+This implementation follows the research paper:
 
 **"Threshold Encryption with Silent Setup"**
 by Sanjam Garg, Guru-Vamsi Policharla, and Mingyuan Wang

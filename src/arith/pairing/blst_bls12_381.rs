@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use blstrs::Bls12;
 use blstrs::G1Affine;
 use blstrs::G2Affine;
@@ -9,6 +10,7 @@ use pairing::MultiMillerLoop;
 
 use crate::{BackendError, Fr, G1, G2, Gt, PairingBackend};
 
+/// Pairing engine implementation for the blst BLS12-381 backend.
 #[derive(Debug)]
 pub struct PairingEngine;
 

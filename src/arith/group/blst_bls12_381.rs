@@ -18,6 +18,7 @@
 //!
 //! Compiled when the Cargo feature `blst` is enabled.
 
+use alloc::vec::Vec;
 use std::io::Cursor;
 
 use blstrs::{Compress, G1Affine, G1Projective, G2Affine, G2Projective, Gt as BlstGt, Scalar};
@@ -26,8 +27,11 @@ use tracing::instrument;
 
 use crate::{BackendError, CurvePoint, TargetGroup};
 
+/// G1 projective group element for the blst BLS12-381 backend.
 pub type G1 = G1Projective;
+/// G2 projective group element for the blst BLS12-381 backend.
 pub type G2 = G2Projective;
+/// Target group element for the blst BLS12-381 backend.
 pub type Gt = BlstGt;
 
 impl CurvePoint<Scalar> for G1 {

@@ -18,6 +18,7 @@
 //!
 //! Compiled when the Cargo feature `blst` is enabled.
 
+use alloc::vec::Vec;
 use blstrs::Scalar;
 use ff::Field;
 use ff::PrimeField;
@@ -25,6 +26,7 @@ use rand_core::RngCore;
 
 use crate::{BackendError, FieldElement};
 
+/// Scalar field element type for the blst BLS12-381 backend.
 pub type Fr = Scalar;
 
 impl FieldElement for Scalar {

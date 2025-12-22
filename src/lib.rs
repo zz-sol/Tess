@@ -83,6 +83,14 @@
 //! - **Payload Encryption**: Uses BLAKE3 as a KDF to derive symmetric keys from the shared
 //!   secret for payload encapsulation.
 
+#![cfg_attr(not(feature = "std"), no_std)]
+#![deny(missing_docs)]
+
+#[macro_use]
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
+
 mod arith;
 mod errors;
 mod kzg;

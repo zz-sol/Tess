@@ -78,6 +78,7 @@
 //! assert_eq!(result.plaintext.unwrap(), message);
 //! ```
 
+use alloc::vec::Vec;
 use core::{fmt::Debug, marker::PhantomData};
 
 use blake3::Hasher;
@@ -103,6 +104,7 @@ pub struct SilentThresholdScheme<B: PairingBackend> {
     symmetric_enc: Blake3XorEncryption,
 }
 
+/// Type alias for the silent threshold scheme implementation.
 pub type SilentThreshold<B> = SilentThresholdScheme<B>;
 
 impl<B: PairingBackend> SilentThresholdScheme<B> {

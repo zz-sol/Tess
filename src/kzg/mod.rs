@@ -1,7 +1,7 @@
 mod scheme;
 pub use scheme::{KZG, SRS};
 
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use crate::{BackendError, PairingBackend, Polynomial};
 

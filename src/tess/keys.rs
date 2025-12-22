@@ -31,6 +31,7 @@
 //! These precomputed values eliminate the need for polynomial interpolation
 //! during decryption, significantly improving performance.
 
+use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use tracing::instrument;
@@ -52,7 +53,9 @@ use crate::{
 /// does not compromise the security of the scheme.
 #[derive(Clone, Debug)]
 pub struct SecretKey<B: PairingBackend> {
+    /// Participant identifier (0-indexed).
     pub participant_id: usize,
+    /// Secret scalar share for this participant.
     pub scalar: B::Scalar,
 }
 
@@ -73,11 +76,17 @@ pub struct SecretKey<B: PairingBackend> {
 /// - `lagrange_li_lj_z`: Commitments to L_i(x) * L_j(z) for all j
 #[derive(Debug)]
 pub struct PublicKey<B: PairingBackend> {
+    /// Participant identifier (0-indexed).
     pub participant_id: usize,
+    /// Standard BLS public key for the participant.
     pub bls_key: B::G1,
+    /// Commitment to the participant's L_i(x).
     pub lagrange_li: B::G1,
+    /// Commitment to L_i(x) - L_i(0).
     pub lagrange_li_minus0: B::G1,
+    /// Commitment to x * L_i(x).
     pub lagrange_li_x: B::G1,
+    /// Commitments to L_i(x) * L_j(z) for all j.
     pub lagrange_li_lj_z: Vec<B::G1>,
 }
 
@@ -108,11 +117,17 @@ impl<B: PairingBackend> Clone for PublicKey<B> {
 /// - `precomputed_pairing`: Precomputed pairing for efficient verification
 #[derive(Clone, Debug)]
 pub struct AggregateKey<B: PairingBackend<Scalar = Fr>> {
+    /// Public keys for all participants.
     pub public_keys: Vec<PublicKey<B>>,
+    /// Aggregated commitment to the secret keys in G1.
     pub ask: B::G1,
+    /// Commitment to the vanishing polynomial in G2.
     pub z_g2: B::G2,
+    /// Precomputed Lagrange row sums for verification.
     pub lagrange_row_sums: Vec<B::G1>,
+    /// Precomputed pairing used for verification.
     pub precomputed_pairing: B::Target,
+    /// KZG parameters used to derive commitments.
     pub kzg_params: SRS<B>,
 }
 
@@ -181,9 +196,13 @@ impl<B: PairingBackend<Scalar = Fr>> AggregateKey<B> {
 /// while public keys and the aggregate key would be distributed to all parties.
 #[derive(Clone, Debug)]
 pub struct KeyMaterial<B: PairingBackend<Scalar = Fr>> {
+    /// Secret keys for all participants.
     pub secret_keys: Vec<SecretKey<B>>,
+    /// Public keys for all participants.
     pub public_keys: Vec<PublicKey<B>>,
+    /// Aggregated public key for encryption.
     pub aggregate_key: AggregateKey<B>,
+    /// KZG commitment parameters.
     pub kzg_params: SRS<B>,
 }
 

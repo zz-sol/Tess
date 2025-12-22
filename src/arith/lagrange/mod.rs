@@ -35,6 +35,7 @@
 //!
 //! This simplifies to efficient FFT-based computation in the evaluation domain.
 
+use alloc::vec::Vec;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
@@ -57,9 +58,13 @@ use crate::{BackendError, DensePolynomial, FieldElement, Fr, PairingBackend, Pol
 /// - `li_lj_z`: Commitments to L_i(x) * L_j(z) for all pairs `(i, j)`
 #[derive(Clone, Debug)]
 pub struct LagrangePowers<B: PairingBackend> {
+    /// Commitments to L_i(x) for each participant i.
     pub li: Vec<B::G1>,
+    /// Commitments to L_i(x) - L_i(0) for each participant i.
     pub li_minus0: Vec<B::G1>,
+    /// Commitments to x * L_i(x) for each participant i.
     pub li_x: Vec<B::G1>,
+    /// Commitments to L_i(x) * L_j(z) for all (i, j) pairs.
     pub li_lj_z: Vec<Vec<B::G1>>,
 }
 

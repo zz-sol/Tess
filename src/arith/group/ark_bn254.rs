@@ -14,6 +14,7 @@
 //! - **G2**: Second source group for pairings (points on E'(Fq2))
 //! - **Gt**: Target group for pairings (elements in Fq12)
 
+use alloc::vec::Vec;
 use ark_bn254::{Bn254, G1Affine, G1Projective, G2Affine, G2Projective};
 use ark_ec::PrimeGroup;
 use ark_ec::pairing::PairingOutput;

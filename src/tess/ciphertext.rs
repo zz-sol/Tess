@@ -30,6 +30,7 @@
 //! - Partial decryptions cannot be forged
 //! - The threshold requirement is enforced
 
+use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use crate::PairingBackend;
@@ -76,11 +77,17 @@ use crate::PairingBackend;
 /// ```
 #[derive(Clone, Debug)]
 pub struct Ciphertext<B: PairingBackend> {
+    /// Random G2 element used during encryption.
     pub gamma_g2: B::G2,
+    /// KZG proof elements in G1.
     pub proof_g1: Vec<B::G1>,
+    /// KZG proof elements in G2.
     pub proof_g2: Vec<B::G2>,
+    /// Precomputed pairing result for verification.
     pub shared_secret: B::Target,
+    /// Threshold required for decryption.
     pub threshold: usize,
+    /// Encrypted payload bytes.
     pub payload: Vec<u8>,
 }
 
@@ -113,7 +120,9 @@ pub struct Ciphertext<B: PairingBackend> {
 /// ```
 #[derive(Debug)]
 pub struct PartialDecryption<B: PairingBackend> {
+    /// Participant identifier (0-indexed).
     pub participant_id: usize,
+    /// Partial decryption share in G2.
     pub response: B::G2,
 }
 
@@ -171,5 +180,6 @@ impl<B: PairingBackend> Clone for PartialDecryption<B> {
 /// ```
 #[derive(Clone, Debug)]
 pub struct DecryptionResult {
+    /// Decrypted plaintext if verification succeeded.
     pub plaintext: Option<Vec<u8>>,
 }

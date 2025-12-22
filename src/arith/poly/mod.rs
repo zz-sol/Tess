@@ -44,8 +44,9 @@
 //! let _ = poly.evaluate(&x);
 //! ```
 
-use std::fmt::Debug;
-use std::ops::{Add, Div, Mul, Sub};
+use alloc::vec::Vec;
+use core::fmt::Debug;
+use core::ops::{Add, Div, Mul, Sub};
 
 use crate::{FieldElement, Fr};
 
@@ -483,11 +484,14 @@ impl<F: FieldArithmetic> EvaluationDomain<F> for Radix2EvaluationDomainGeneric<F
 /// Polynomial evaluations tied to an FFT domain.
 #[derive(Clone, Debug)]
 pub struct EvaluationsGeneric<F: FieldArithmetic> {
+    /// Evaluation values in the domain order.
     pub evals: Vec<F>,
+    /// Evaluation domain associated with the values.
     pub domain: Radix2EvaluationDomainGeneric<F>,
 }
 
 impl<F: FieldArithmetic> EvaluationsGeneric<F> {
+    /// Creates evaluations from a value vector and a domain.
     pub fn from_vec_and_domain(evals: Vec<F>, domain: Radix2EvaluationDomainGeneric<F>) -> Self {
         assert_eq!(evals.len(), domain.size);
         EvaluationsGeneric { evals, domain }
@@ -502,7 +506,9 @@ impl<F: FieldArithmetic> EvaluationsGeneric<F> {
 
 /// Re-export the concrete types for the active scalar field.
 pub type DensePolynomial = DensePolynomialGeneric<Fr>;
+/// FFT evaluation domain for the active scalar field.
 pub type Radix2EvaluationDomain = Radix2EvaluationDomainGeneric<Fr>;
+/// Polynomial evaluations for the active scalar field.
 pub type Evaluations = EvaluationsGeneric<Fr>;
 
 #[cfg(test)]

@@ -48,6 +48,8 @@
 //! let commitment = <KZG as PolynomialCommitment<PairingEngine>>::commit_g1(&srs, &poly).unwrap();
 //! ```
 
+use alloc::string::String;
+use alloc::vec::Vec;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -124,8 +126,11 @@ pub struct KZG;
 /// ```
 #[derive(Debug)]
 pub struct SRS<B: PairingBackend<Scalar = Fr>> {
+    /// Powers of tau in G1: g * tau^i for i = 0..max_degree.
     pub powers_of_g: Vec<B::G1>,
+    /// Powers of tau in G2: h * tau^i for i = 0..max_degree.
     pub powers_of_h: Vec<B::G2>,
+    /// Precomputed pairing e(g, h) for verification.
     pub e_gh: B::Target,
 }
 
