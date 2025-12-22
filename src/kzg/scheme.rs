@@ -253,7 +253,7 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
 
     fn setup(max_degree: usize, seed: &[u8; 32]) -> Result<Self::Parameters, BackendError> {
         let mut rng = ChaCha20Rng::from_seed(*seed);
-        let mut tau = Fr::random(&mut rng);
+        let tau = Fr::random(&mut rng);
         let result = SRS::new_unsafe(&tau, max_degree).map_err(BackendError::Other);
         result
     }

@@ -21,6 +21,7 @@ use rand_core::RngCore;
 
 use crate::{BackendError, FieldElement};
 
+/// Scalar field type for the Arkworks BLS12-381 backend.
 pub type Fr = ArkFr;
 
 impl FieldElement for Fr {

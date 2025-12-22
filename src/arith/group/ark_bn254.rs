@@ -26,11 +26,14 @@ use tracing::instrument;
 use crate::{BackendError, CurvePoint, Fr, TargetGroup};
 
 #[derive(Clone, Copy, Debug)]
+/// G1 group element wrapper for the Arkworks BN254 backend.
 pub struct G1(pub G1Projective);
 
 #[derive(Clone, Copy, Debug)]
+/// G2 group element wrapper for the Arkworks BN254 backend.
 pub struct G2(pub G2Projective);
 
+/// Target group type for the Arkworks BN254 backend.
 pub type Gt = PairingOutput<Bn254>;
 
 impl CurvePoint<Fr> for G1 {

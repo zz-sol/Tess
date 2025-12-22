@@ -177,7 +177,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
             ));
         }
 
-        let mut tau = B::Scalar::random(rng);
+        let tau = B::Scalar::random(rng);
         let result = (|| {
             let srs = SRS::new_unsafe(&tau, parties).map_err(|e| {
                 Error::Backend(BackendError::Other(format!("SRS generation failed: {}", e)))
