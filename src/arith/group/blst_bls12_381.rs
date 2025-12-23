@@ -80,7 +80,7 @@ impl CurvePoint<Scalar> for G1 {
     }
 
     #[instrument(level = "trace", skip_all, fields(len = points.len()))]
-    fn multi_scalar_multipliation(points: &[Self], scalars: &[Scalar]) -> Self {
+    fn multi_scalar_multiplication(points: &[Self], scalars: &[Scalar]) -> Self {
         assert_eq!(
             points.len(),
             scalars.len(),
@@ -136,7 +136,7 @@ impl CurvePoint<Scalar> for G2 {
     }
 
     #[instrument(level = "trace", skip_all, fields(len = points.len()))]
-    fn multi_scalar_multipliation(points: &[Self], scalars: &[Scalar]) -> Self {
+    fn multi_scalar_multiplication(points: &[Self], scalars: &[Scalar]) -> Self {
         assert_eq!(
             points.len(),
             scalars.len(),

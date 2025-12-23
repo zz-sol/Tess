@@ -195,7 +195,8 @@ impl<B: PairingBackend<Scalar = Fr>> SRS<B> {
         let g = B::G1::generator();
         let h = B::G2::generator();
 
-        let mut powers_of_tau = vec![<B::Scalar as FieldElement>::one()];
+        let mut powers_of_tau = Vec::with_capacity(max_degree + 1);
+        powers_of_tau.push(<B::Scalar as FieldElement>::one());
         let mut cur = *tau;
         for _ in 0..max_degree {
             powers_of_tau.push(cur);
@@ -266,7 +267,7 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
             return Err(BackendError::Math("polynomial degree too large"));
         }
         let scalars = &polynomial.coeffs()[..=degree];
-        let commitment = B::G1::multi_scalar_multipliation(&params.powers_of_g[..=degree], scalars);
+        let commitment = B::G1::multi_scalar_multiplication(&params.powers_of_g[..=degree], scalars);
         Ok(commitment)
     }
 
@@ -279,13 +280,14 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
             return Err(BackendError::Math("polynomial degree too large"));
         }
         let scalars = &polynomial.coeffs()[..=degree];
-        let commitment = B::G2::multi_scalar_multipliation(&params.powers_of_h[..=degree], scalars);
+        let commitment = B::G2::multi_scalar_multiplication(&params.powers_of_h[..=degree], scalars);
         Ok(commitment)
     }
 }
 
-fn wipe_scalars<F: FieldElement>(scalars: &mut [F]) {
+fn wipe_scalars<F: FieldElement + Copy>(scalars: &mut [F]) {
+    let zero = F::zero();
     for scalar in scalars {
-        *scalar = F::zero();
+        unsafe { core::ptr::write_volatile(scalar, zero) };
     }
 }

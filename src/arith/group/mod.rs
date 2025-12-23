@@ -81,7 +81,7 @@ pub trait CurvePoint<F: FieldElement>: Clone + Send + Sync + Debug + 'static + C
     fn batch_normalize(points: &[Self]) -> Vec<Self::Affine>;
 
     /// Performs multi scalar multiplications.
-    fn multi_scalar_multipliation(points: &[Self], scalar: &[F]) -> Self;
+    fn multi_scalar_multiplication(points: &[Self], scalar: &[F]) -> Self;
 }
 
 /// Pairing target group (GT) abstraction.

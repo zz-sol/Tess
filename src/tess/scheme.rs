@@ -469,7 +469,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
                 .iter()
                 .map(|&idx| agg_key.public_keys[idx].bls_key)
                 .collect();
-            B::G1::multi_scalar_multipliation(&bases, &scaled_scalars)
+            B::G1::multi_scalar_multiplication(&bases, &scaled_scalars)
         };
 
         let sigma = if scalars.is_empty() {
@@ -479,7 +479,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
                 .iter()
                 .map(|&idx| partial_map[idx].unwrap().response)
                 .collect();
-            B::G2::multi_scalar_multipliation(&bases, &scaled_scalars)
+            B::G2::multi_scalar_multiplication(&bases, &scaled_scalars)
         };
 
         let qx = if scalars.is_empty() {
@@ -489,7 +489,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
                 .iter()
                 .map(|&idx| agg_key.public_keys[idx].lagrange_li_x)
                 .collect();
-            B::G1::multi_scalar_multipliation(&points, &scalars)
+            B::G1::multi_scalar_multiplication(&points, &scalars)
         };
 
         let qz = if scalars.is_empty() {
@@ -499,7 +499,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
                 .iter()
                 .map(|&idx| agg_key.lagrange_row_sums[idx])
                 .collect();
-            B::G1::multi_scalar_multipliation(&points, &scalars)
+            B::G1::multi_scalar_multiplication(&points, &scalars)
         };
 
         let qhatx = if scalars.is_empty() {
@@ -509,7 +509,7 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
                 .iter()
                 .map(|&idx| agg_key.public_keys[idx].lagrange_li_minus0)
                 .collect();
-            B::G1::multi_scalar_multipliation(&points, &scalars)
+            B::G1::multi_scalar_multiplication(&points, &scalars)
         };
 
         let w1 = [
