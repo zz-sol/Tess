@@ -267,7 +267,8 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
             return Err(BackendError::Math("polynomial degree too large"));
         }
         let scalars = &polynomial.coeffs()[..=degree];
-        let commitment = B::G1::multi_scalar_multiplication(&params.powers_of_g[..=degree], scalars);
+        let commitment =
+            B::G1::multi_scalar_multiplication(&params.powers_of_g[..=degree], scalars);
         Ok(commitment)
     }
 
@@ -280,7 +281,8 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
             return Err(BackendError::Math("polynomial degree too large"));
         }
         let scalars = &polynomial.coeffs()[..=degree];
-        let commitment = B::G2::multi_scalar_multiplication(&params.powers_of_h[..=degree], scalars);
+        let commitment =
+            B::G2::multi_scalar_multiplication(&params.powers_of_h[..=degree], scalars);
         Ok(commitment)
     }
 }
