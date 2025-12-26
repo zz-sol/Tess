@@ -44,7 +44,7 @@ use crate::{BackendError, CurvePoint, FieldElement, TargetGroup};
 /// let result = PairingEngine::pairing(&g1, &g2);
 /// println!("{:?}", result);
 /// ```
-pub trait PairingBackend: Send + Sync + Debug + Sized + 'static {
+pub trait PairingBackend: Clone + Send + Sync + Debug + Sized + 'static {
     /// Scalar field type (Fr).
     type Scalar: FieldElement;
     /// First curve group (G1).

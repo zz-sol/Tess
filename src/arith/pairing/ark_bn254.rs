@@ -21,7 +21,7 @@ use ark_ec::pairing::Pairing;
 
 use crate::{BackendError, Fr, G1, G2, Gt, PairingBackend};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 /// Pairing engine for the Arkworks BN254 backend.
 pub struct PairingEngine;
 

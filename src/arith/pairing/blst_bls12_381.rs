@@ -11,7 +11,7 @@ use pairing::MultiMillerLoop;
 use crate::{BackendError, Fr, G1, G2, Gt, PairingBackend};
 
 /// Pairing engine implementation for the blst BLS12-381 backend.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct PairingEngine;
 
 /// blst-backed `PairingBackend` implementation for BLS12-381.
