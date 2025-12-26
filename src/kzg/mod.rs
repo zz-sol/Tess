@@ -188,4 +188,223 @@ mod tests {
             .expect("batch verify");
         assert!(!ok, "batch proof should not verify with tampered value");
     }
+
+    #[test]
+    fn kzg_zero_degree_polynomial() {
+        let mut rng = StdRng::from_entropy();
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+        let params: SRS<crate::PairingEngine> = KZG::setup(8, &seed).expect("setup");
+
+        // Constant polynomial
+        let constant = Fr::from_u64(42);
+        let poly = DensePolynomial::from_coefficients_vec(vec![constant]);
+        let commitment = KZG::commit_g1(&params, &poly).expect("commit");
+
+        let point = Fr::from_u64(5);
+        let (value, proof) = KZG::open_g1(&params, &poly, &point).expect("open");
+
+        assert_eq!(
+            value, constant,
+            "constant polynomial should evaluate to constant"
+        );
+        let ok = KZG::verify_g1(&params, &commitment, &point, &value, &proof).expect("verify");
+        assert!(ok, "constant polynomial proof should verify");
+    }
+
+    #[test]
+    fn kzg_commit_g2() {
+        let mut rng = StdRng::from_entropy();
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+        let params: SRS<crate::PairingEngine> = KZG::setup(8, &seed).expect("setup");
+        let coeffs: Vec<Fr> = (0..4).map(|_| Fr::random(&mut rng)).collect();
+        let poly = DensePolynomial::from_coefficients_vec(coeffs);
+
+        let commitment = KZG::commit_g2(&params, &poly).expect("commit_g2");
+        assert!(
+            !commitment.is_identity(),
+            "G2 commitment should not be identity for random polynomial"
+        );
+    }
+
+    #[test]
+    fn kzg_batch_empty() {
+        let mut rng = StdRng::from_entropy();
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+        let params: SRS<crate::PairingEngine> = KZG::setup(8, &seed).expect("setup");
+        let coeffs: Vec<Fr> = (0..4).map(|_| Fr::random(&mut rng)).collect();
+        let poly = DensePolynomial::from_coefficients_vec(coeffs);
+        let commitment = KZG::commit_g1(&params, &poly).expect("commit");
+
+        // Empty batch
+        let points: Vec<Fr> = vec![];
+        let (values, proofs) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
+        assert!(values.is_empty(), "empty batch should return empty values");
+        assert!(proofs.is_empty(), "empty batch should return empty proofs");
+
+        let ok = KZG::batch_verify_g1(&params, &commitment, &points, &values, &proofs)
+            .expect("batch verify");
+        assert!(ok, "empty batch should verify successfully");
+    }
+
+    #[test]
+    fn kzg_batch_single_point() {
+        let mut rng = StdRng::from_entropy();
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+        let params: SRS<crate::PairingEngine> = KZG::setup(8, &seed).expect("setup");
+        let coeffs: Vec<Fr> = (0..4).map(|_| Fr::random(&mut rng)).collect();
+        let poly = DensePolynomial::from_coefficients_vec(coeffs);
+        let commitment = KZG::commit_g1(&params, &poly).expect("commit");
+
+        // Single point batch
+        let points = vec![Fr::from_u64(7)];
+        let (values, proofs) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
+
+        // Should match individual opening
+        let (value_single, _proof_single) = KZG::open_g1(&params, &poly, &points[0]).expect("open");
+        assert_eq!(
+            values[0], value_single,
+            "batch and single opening should match"
+        );
+
+        let ok = KZG::batch_verify_g1(&params, &commitment, &points, &values, &proofs)
+            .expect("batch verify");
+        assert!(ok, "single point batch should verify");
+    }
+
+    #[test]
+    fn kzg_verify_wrong_point() {
+        let mut rng = StdRng::from_entropy();
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+        let params: SRS<crate::PairingEngine> = KZG::setup(8, &seed).expect("setup");
+        let coeffs: Vec<Fr> = (0..4).map(|_| Fr::random(&mut rng)).collect();
+        let poly = DensePolynomial::from_coefficients_vec(coeffs);
+        let commitment = KZG::commit_g1(&params, &poly).expect("commit");
+
+        let point = Fr::from_u64(3);
+        let (value, proof) = KZG::open_g1(&params, &poly, &point).expect("open");
+
+        // Verify with wrong point
+        let wrong_point = Fr::from_u64(4);
+        let ok =
+            KZG::verify_g1(&params, &commitment, &wrong_point, &value, &proof).expect("verify");
+        assert!(!ok, "proof should not verify with wrong point");
+    }
+
+    #[test]
+    fn kzg_verify_wrong_commitment() {
+        let mut rng = StdRng::from_entropy();
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+        let params: SRS<crate::PairingEngine> = KZG::setup(8, &seed).expect("setup");
+
+        let coeffs1: Vec<Fr> = (0..4).map(|_| Fr::random(&mut rng)).collect();
+        let poly1 = DensePolynomial::from_coefficients_vec(coeffs1);
+        let commitment1 = KZG::commit_g1(&params, &poly1).expect("commit");
+
+        let coeffs2: Vec<Fr> = (0..4).map(|_| Fr::random(&mut rng)).collect();
+        let poly2 = DensePolynomial::from_coefficients_vec(coeffs2);
+
+        let point = Fr::from_u64(3);
+        let (value, proof) = KZG::open_g1(&params, &poly2, &point).expect("open");
+
+        // Verify with wrong commitment
+        let ok = KZG::verify_g1(&params, &commitment1, &point, &value, &proof).expect("verify");
+        assert!(!ok, "proof should not verify with wrong commitment");
+    }
+
+    #[test]
+    fn kzg_batch_verify_mismatched_lengths() {
+        let mut rng = StdRng::from_entropy();
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+        let params: SRS<crate::PairingEngine> = KZG::setup(8, &seed).expect("setup");
+        let coeffs: Vec<Fr> = (0..4).map(|_| Fr::random(&mut rng)).collect();
+        let poly = DensePolynomial::from_coefficients_vec(coeffs);
+        let commitment = KZG::commit_g1(&params, &poly).expect("commit");
+
+        let points = vec![Fr::from_u64(1), Fr::from_u64(2), Fr::from_u64(3)];
+        let (values, proofs) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
+
+        // Mismatched lengths should return error
+        let short_values = vec![values[0], values[1]];
+        let result = KZG::batch_verify_g1(&params, &commitment, &points, &short_values, &proofs);
+        assert!(result.is_err(), "should error on mismatched array lengths");
+    }
+
+    #[test]
+    fn kzg_evaluation_at_zero() {
+        let mut rng = StdRng::from_entropy();
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+        let params: SRS<crate::PairingEngine> = KZG::setup(8, &seed).expect("setup");
+
+        let constant = Fr::from_u64(42);
+        let coeffs = vec![constant, Fr::from_u64(1), Fr::from_u64(2)];
+        let poly = DensePolynomial::from_coefficients_vec(coeffs);
+        let commitment = KZG::commit_g1(&params, &poly).expect("commit");
+
+        let point = Fr::zero();
+        let (value, proof) = KZG::open_g1(&params, &poly, &point).expect("open");
+
+        assert_eq!(
+            value, constant,
+            "evaluation at zero should be constant term"
+        );
+        let ok = KZG::verify_g1(&params, &commitment, &point, &value, &proof).expect("verify");
+        assert!(ok, "proof at zero should verify");
+    }
+
+    #[test]
+    fn kzg_max_degree_polynomial() {
+        let mut rng = StdRng::from_entropy();
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+        let max_degree = 8;
+        let params: SRS<crate::PairingEngine> = KZG::setup(max_degree, &seed).expect("setup");
+
+        // Create polynomial of max degree
+        let coeffs: Vec<Fr> = (0..=max_degree).map(|_| Fr::random(&mut rng)).collect();
+        let poly = DensePolynomial::from_coefficients_vec(coeffs);
+        let commitment = KZG::commit_g1(&params, &poly).expect("commit");
+
+        let point = Fr::from_u64(3);
+        let (value, proof) = KZG::open_g1(&params, &poly, &point).expect("open");
+        let ok = KZG::verify_g1(&params, &commitment, &point, &value, &proof).expect("verify");
+        assert!(ok, "max degree polynomial should verify");
+    }
+
+    #[test]
+    fn kzg_batch_verify_multiple_tampering() {
+        let mut rng = StdRng::from_entropy();
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+        let params: SRS<crate::PairingEngine> = KZG::setup(8, &seed).expect("setup");
+        let coeffs: Vec<Fr> = (0..4).map(|_| Fr::random(&mut rng)).collect();
+        let poly = DensePolynomial::from_coefficients_vec(coeffs);
+        let commitment = KZG::commit_g1(&params, &poly).expect("commit");
+
+        let points = vec![
+            Fr::from_u64(1),
+            Fr::from_u64(2),
+            Fr::from_u64(3),
+            Fr::from_u64(4),
+        ];
+        let (mut values, proofs) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
+
+        // Tamper with multiple values
+        values[0] = Fr::random(&mut rng);
+        values[2] = Fr::random(&mut rng);
+
+        let ok = KZG::batch_verify_g1(&params, &commitment, &points, &values, &proofs)
+            .expect("batch verify");
+        assert!(
+            !ok,
+            "batch proof should not verify with multiple tampered values"
+        );
+    }
 }
