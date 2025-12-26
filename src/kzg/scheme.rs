@@ -56,6 +56,7 @@ use rand_chacha::ChaCha20Rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::CurvePoint;
+use crate::TargetGroup;
 use crate::{
     BackendError, DensePolynomial, FieldElement, Fr, PairingBackend, Polynomial,
     PolynomialCommitment,
@@ -327,9 +328,79 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
         let h = params.powers_of_h[0];
         let h_tau = params.powers_of_h[1];
 
-        let left = B::pairing(&commitment.sub(&g.mul_scalar(value)), &h);
-        let right = B::pairing(proof, &h_tau.sub(&h.mul_scalar(point)));
-        Ok(left == right)
+        // Verify: e(C - g*v, h) == e(π, h*τ - h*z)
+        // Using multi-pairing: e(C - g*v, h) * e(-π, h*τ - h*z) == 1
+        let lhs = commitment.sub(&g.mul_scalar(value));
+        let neg_proof = proof.negate();
+        let rhs = h_tau.sub(&h.mul_scalar(point));
+
+        let result = B::multi_pairing(&[lhs, neg_proof], &[h, rhs])?;
+        Ok(result == <B::Target as TargetGroup>::identity())
+    }
+
+    fn batch_open_g1(
+        params: &Self::Parameters,
+        polynomial: &Self::Polynomial,
+        points: &[B::Scalar],
+    ) -> Result<(Vec<B::Scalar>, Vec<B::G1>), BackendError> {
+        if points.is_empty() {
+            return Ok((Vec::new(), Vec::new()));
+        }
+
+        let mut values = Vec::with_capacity(points.len());
+        let mut proofs = Vec::with_capacity(points.len());
+
+        for point in points {
+            let (value, proof) = Self::open_g1(params, polynomial, point)?;
+            values.push(value);
+            proofs.push(proof);
+        }
+
+        Ok((values, proofs))
+    }
+
+    fn batch_verify_g1(
+        params: &Self::Parameters,
+        commitment: &B::G1,
+        points: &[B::Scalar],
+        values: &[B::Scalar],
+        proofs: &[B::G1],
+    ) -> Result<bool, BackendError> {
+        if points.len() != values.len() || points.len() != proofs.len() {
+            return Err(BackendError::Math("batch verify: mismatched array lengths"));
+        }
+
+        if points.is_empty() {
+            return Ok(true);
+        }
+
+        if params.powers_of_h.len() < 2 {
+            return Err(BackendError::Math("insufficient SRS powers"));
+        }
+
+        let g = B::G1::generator();
+        let h = params.powers_of_h[0];
+        let h_tau = params.powers_of_h[1];
+
+        // Batch verify using multi-pairing
+        // For each i: e(C - g*v_i, h) == e(π_i, h*τ - h*z_i)
+        // Aggregate as: ∏ e(C - g*v_i, h) * e(-π_i, h*τ - h*z_i) == 1
+
+        let mut g1_points = Vec::with_capacity(points.len() * 2);
+        let mut g2_points = Vec::with_capacity(points.len() * 2);
+
+        for i in 0..points.len() {
+            // Add e(C - g*v_i, h)
+            g1_points.push(commitment.sub(&g.mul_scalar(&values[i])));
+            g2_points.push(h);
+
+            // Add e(-π_i, h*τ - h*z_i)
+            g1_points.push(proofs[i].negate());
+            g2_points.push(h_tau.sub(&h.mul_scalar(&points[i])));
+        }
+
+        let result = B::multi_pairing(&g1_points, &g2_points)?;
+        Ok(result == <B::Target as TargetGroup>::identity())
     }
 }
 
