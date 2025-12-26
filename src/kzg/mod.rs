@@ -1,6 +1,7 @@
 mod scheme;
 pub use scheme::{KZG, SRS};
 
+use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use crate::{BackendError, PairingBackend, Polynomial};
