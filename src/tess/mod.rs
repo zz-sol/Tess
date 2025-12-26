@@ -36,7 +36,7 @@ mod scheme;
 pub use scheme::{SilentThreshold, SilentThresholdScheme};
 
 mod keys;
-pub use keys::{AggregateKey, KeyMaterial, PublicKey, SecretKey};
+pub use keys::{AggregateKey, PublicKey, SecretKey, UnsafeKeyMaterial};
 
 mod params;
 pub use params::Params;
@@ -64,14 +64,45 @@ pub trait ThresholdEncryption<B: PairingBackend<Scalar = Fr>>:
 
     /// Generates key material for all participants.
     ///
-    /// This generates secret keys for all `n` participants and derives their
+    /// Unsafe: this generates secret keys for all `n` participants and derives their
     /// corresponding public keys with Lagrange commitment hints.
-    fn keygen<R: RngCore + ?Sized>(
+    ///
+    /// You should only use this method for testing scenarios.
+    /// For real-world usage, each participant should generate their own key pair
+    /// independently using `keygen_single_validator()`. The aggregate public key
+    /// can then be computed using `aggregate_public_key()`.
+    fn keygen_unsafe<R: RngCore + ?Sized>(
         &self,
         rng: &mut R,
         parties: usize,
         srs: &Params<B>,
-    ) -> Result<KeyMaterial<B>, Error>;
+    ) -> Result<UnsafeKeyMaterial<B>, Error>;
+
+    /// Generates a key pair for a single validator (silent setup).
+    ///
+    /// This allows each validator to independently generate their own key pair
+    /// without coordination. The validator samples a random secret key and derives
+    /// their public key using the precomputed Lagrange commitments in `params`.
+    ///
+    /// # Arguments
+    ///
+    /// * `rng` - Cryptographically secure random number generator
+    /// * `validator_id` - Index of this validator (must be in range [0, parties))
+    /// * `params` - Precomputed parameters from `param_gen()`
+    ///
+    /// # Returns
+    ///
+    /// A tuple of `(SecretKey, PublicKey)` for this validator.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if `validator_id >= parties` (where parties is from params).
+    fn keygen_single_validator<R: RngCore + ?Sized>(
+        &self,
+        rng: &mut R,
+        validator_id: usize,
+        params: &Params<B>,
+    ) -> Result<(SecretKey<B>, PublicKey<B>), Error>;
 
     /// Recomputes the aggregate key from public keys using precomputed Lagrange powers.
     fn aggregate_public_key(

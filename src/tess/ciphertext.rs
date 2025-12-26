@@ -66,7 +66,7 @@ use crate::PairingBackend;
 /// let scheme = SilentThresholdScheme::<PairingEngine>::new();
 ///
 /// let params = scheme.param_gen(&mut rng, 8, 4).unwrap();
-/// let keys = scheme.keygen(&mut rng, 8, &params).unwrap();
+/// let keys = scheme.keygen_unsafe(&mut rng, 8, &params).unwrap();
 ///
 /// // Encrypt a message
 /// let message = b"Secret threshold message";
@@ -118,7 +118,7 @@ pub struct Ciphertext<B: PairingBackend> {
 /// let scheme = SilentThresholdScheme::<PairingEngine>::new();
 ///
 /// let params = scheme.param_gen(&mut rng, 8, 4).unwrap();
-/// let keys = scheme.keygen(&mut rng, 8, &params).unwrap();
+/// let keys = scheme.keygen_unsafe(&mut rng, 8, &params).unwrap();
 /// let ciphertext = scheme.encrypt(&mut rng, &keys.aggregate_key,&params, 4, b"message").unwrap();
 ///
 /// // Each participant creates a partial decryption
@@ -161,7 +161,7 @@ impl<B: PairingBackend> Clone for PartialDecryption<B> {
 /// let scheme = SilentThresholdScheme::<PairingEngine>::new();
 ///
 /// let params = scheme.param_gen(&mut rng, 8, 4).unwrap();
-/// let keys = scheme.keygen(&mut rng, 8, &params).unwrap();
+/// let keys = scheme.keygen_unsafe(&mut rng, 8, &params).unwrap();
 ///
 /// let message = b"Threshold encrypted message";
 /// let ciphertext = scheme.encrypt(&mut rng, &keys.aggregate_key, &params, 4, message).unwrap();

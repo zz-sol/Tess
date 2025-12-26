@@ -47,7 +47,7 @@
 //!
 //! // Generate parameters for 8 parties with threshold 5
 //! let params = scheme.param_gen(&mut rng, 8, 5).unwrap();
-//! let keys = scheme.keygen(&mut rng, 8, &params).unwrap();
+//! let keys = scheme.keygen_unsafe(&mut rng, 8, &params).unwrap();
 //!
 //! // Encrypt a message
 //! let message = b"Secret message";
@@ -88,9 +88,9 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tracing::instrument;
 
 use crate::{
-    AggregateKey, Ciphertext, DecryptionResult, DensePolynomial, Fr, KZG, KeyMaterial,
-    LagrangePowers, PairingBackend, Params, PartialDecryption, Polynomial, PolynomialCommitment,
-    PublicKey, Radix2EvaluationDomain, SRS, SecretKey, TargetGroup, ThresholdEncryption,
+    AggregateKey, Ciphertext, DecryptionResult, DensePolynomial, Fr, KZG, LagrangePowers,
+    PairingBackend, Params, PartialDecryption, Polynomial, PolynomialCommitment, PublicKey,
+    Radix2EvaluationDomain, SRS, SecretKey, TargetGroup, ThresholdEncryption, UnsafeKeyMaterial,
     arith::{CurvePoint, FieldElement},
     build_lagrange_polys,
     errors::{BackendError, Error},
@@ -204,12 +204,12 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
     }
 
     #[instrument(level = "info", skip_all, fields(parties))]
-    fn keygen<R: RngCore + ?Sized>(
+    fn keygen_unsafe<R: RngCore + ?Sized>(
         &self,
         rng: &mut R,
         parties: usize,
         params: &Params<B>,
-    ) -> Result<KeyMaterial<B>, Error> {
+    ) -> Result<UnsafeKeyMaterial<B>, Error> {
         let secret_keys = Self::generate_secret_keys(rng, parties);
 
         let public_keys = {
@@ -230,12 +230,44 @@ impl<B: PairingBackend<Scalar = Fr>> ThresholdEncryption<B> for SilentThresholdS
         };
 
         let aggregate_key = AggregateKey::aggregate_keys(&public_keys, params, parties)?;
-        Ok(KeyMaterial {
+        Ok(UnsafeKeyMaterial {
             secret_keys,
             public_keys,
             aggregate_key,
             kzg_params: params.srs.clone(),
         })
+    }
+
+    #[instrument(level = "trace", skip_all, fields(validator_id))]
+    fn keygen_single_validator<R: RngCore + ?Sized>(
+        &self,
+        rng: &mut R,
+        validator_id: usize,
+        params: &Params<B>,
+    ) -> Result<(SecretKey<B>, PublicKey<B>), Error> {
+        // Validate validator_id is within bounds
+        if validator_id >= params.lagrange_powers.li.len() {
+            return Err(Error::Backend(BackendError::Math(
+                "validator_id out of bounds",
+            )));
+        }
+
+        // Each validator independently generates their own secret key
+        // This is the core of "silent setup" - no coordination required
+        let secret_key = SecretKey {
+            participant_id: validator_id,
+            scalar: B::Scalar::random(rng),
+        };
+
+        // Derive the public key using precomputed Lagrange commitments
+        // This reuses the existing derive_public_key method which performs:
+        // - Computes bls_key = scalar * G1::generator()
+        // - Computes lagrange_li = scalar * precomputed_L_i(tau)
+        // - Computes lagrange_li_minus0 = scalar * precomputed_(L_i(tau) - L_i(0))
+        // - etc. for all Lagrange-related commitments
+        let public_key = secret_key.derive_public_key(params)?;
+
+        Ok((secret_key, public_key))
     }
 
     #[instrument(level = "info", skip_all, fields(parties, num_keys = public_keys.len()))]
@@ -651,7 +683,7 @@ fn derive_payload_key<B: PairingBackend>(enc_key: &B::Target) -> [u8; 32] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::thread_rng;
+    use rand::{SeedableRng, rngs::StdRng, thread_rng};
 
     use crate::PairingEngine;
 
@@ -663,7 +695,7 @@ mod tests {
         let parties = 8;
         let threshold = 4;
         let params = scheme.param_gen(&mut rng, parties, threshold).unwrap();
-        let keys = scheme.keygen(&mut rng, parties, &params).unwrap();
+        let keys = scheme.keygen_unsafe(&mut rng, parties, &params).unwrap();
 
         let payload = b"e2e negative test payload";
         let mut ct = scheme
@@ -682,6 +714,67 @@ mod tests {
 
         let res = scheme.aggregate_decrypt(&ct, &partials, &selector, &keys.aggregate_key);
         assert!(matches!(res, Err(Error::MalformedInput(_))));
+    }
+
+    #[test]
+    fn keygen_single_validator_matches_keygen_unsafe() {
+        let scheme = SilentThresholdScheme::<PairingEngine>::new();
+        let parties = 8;
+        let threshold = 4;
+
+        let mut params_rng = StdRng::seed_from_u64(1);
+        let params = scheme
+            .param_gen(&mut params_rng, parties, threshold)
+            .unwrap();
+
+        let mut bulk_rng = StdRng::seed_from_u64(2);
+        let bulk_keys = scheme
+            .keygen_unsafe(&mut bulk_rng, parties, &params)
+            .unwrap();
+
+        let mut single_rng = StdRng::seed_from_u64(2);
+        let mut public_keys = Vec::with_capacity(parties);
+        let mut secret_keys = Vec::with_capacity(parties);
+        for validator_id in 0..parties {
+            let (secret_key, public_key) = scheme
+                .keygen_single_validator(&mut single_rng, validator_id, &params)
+                .unwrap();
+            secret_keys.push(secret_key);
+            public_keys.push(public_key);
+        }
+
+        for idx in 0..parties {
+            assert_eq!(secret_keys[idx].scalar, bulk_keys.secret_keys[idx].scalar);
+            assert_eq!(public_keys[idx].bls_key, bulk_keys.public_keys[idx].bls_key);
+            assert_eq!(
+                public_keys[idx].lagrange_li,
+                bulk_keys.public_keys[idx].lagrange_li
+            );
+            assert_eq!(
+                public_keys[idx].lagrange_li_minus0,
+                bulk_keys.public_keys[idx].lagrange_li_minus0
+            );
+            assert_eq!(
+                public_keys[idx].lagrange_li_x,
+                bulk_keys.public_keys[idx].lagrange_li_x
+            );
+            assert_eq!(
+                public_keys[idx].lagrange_li_lj_z,
+                bulk_keys.public_keys[idx].lagrange_li_lj_z
+            );
+        }
+
+        let aggregate_key = AggregateKey::aggregate_keys(&public_keys, &params, parties).unwrap();
+        assert_eq!(aggregate_key.ask, bulk_keys.aggregate_key.ask);
+        assert_eq!(aggregate_key.z_g2, bulk_keys.aggregate_key.z_g2);
+        assert_eq!(
+            aggregate_key.lagrange_row_sums,
+            bulk_keys.aggregate_key.lagrange_row_sums
+        );
+        assert_eq!(
+            aggregate_key.precomputed_pairing,
+            bulk_keys.aggregate_key.precomputed_pairing
+        );
     }
 
     #[test]

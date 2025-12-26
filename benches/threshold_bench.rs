@@ -28,7 +28,7 @@ pub fn bench_threshold(c: &mut Criterion) {
         .expect("param_gen failed");
 
     let key_material = scheme
-        .keygen(&mut rng, parties, &params)
+        .keygen_unsafe(&mut rng, parties, &params)
         .expect("keygen failed");
 
     // Measure encryption

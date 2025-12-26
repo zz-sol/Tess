@@ -5,7 +5,7 @@
 //! - [`SecretKey`]: A participant's secret share
 //! - [`PublicKey`]: A participant's public key with Lagrange commitment hints
 //! - [`AggregateKey`]: The combined public key used for encryption
-//! - [`KeyMaterial`]: Complete bundle of keys from key generation
+//! - [`UnsafeKeyMaterial`]: Complete bundle of keys from key generation
 //!
 //! # Key Generation Flow
 //!
@@ -218,8 +218,12 @@ pub struct AggregateKey<B: PairingBackend<Scalar = Fr>> {
 }
 
 impl<B: PairingBackend<Scalar = Fr>> AggregateKey<B> {
+    /// Aggregates multiple public keys into a single aggregate key.
+    ///
+    /// This function combines the public keys of all participants to create
+    /// an aggregate key used for encryption and verification.
     #[instrument(level = "info", skip_all, fields(parties, num_keys = public_keys.len()))]
-    pub(crate) fn aggregate_keys(
+    pub fn aggregate_keys(
         public_keys: &[PublicKey<B>],
         params: &Params<B>,
         parties: usize,
@@ -315,7 +319,7 @@ impl<B: PairingBackend<Scalar = Fr>> AggregateKey<B> {
 /// In a real deployment, each participant would only receive their own secret key,
 /// while public keys and the aggregate key would be distributed to all parties.
 #[derive(Clone, Debug)]
-pub struct KeyMaterial<B: PairingBackend<Scalar = Fr>> {
+pub struct UnsafeKeyMaterial<B: PairingBackend<Scalar = Fr>> {
     /// Secret keys for all participants.
     pub secret_keys: Vec<SecretKey<B>>,
     /// Public keys for all participants.
