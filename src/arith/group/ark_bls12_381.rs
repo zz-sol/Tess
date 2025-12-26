@@ -26,11 +26,11 @@ use tracing::instrument;
 
 use crate::{BackendError, CurvePoint, Fr, TargetGroup};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 /// G1 group element wrapper for the Arkworks BLS12-381 backend.
 pub struct G1(pub G1Projective);
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 /// G2 group element wrapper for the Arkworks BLS12-381 backend.
 pub struct G2(pub G2Projective);
 

@@ -6,6 +6,8 @@
 
 A production-grade Rust implementation of threshold encryption with silent (non-interactive) setup, built on Knowledge of Exponent (KZG) commitments.
 
+You may also be interested in [TrX: Encrypted Mempools in High Performance BFT Protocols](https://github.com/zz-sol/TrX).
+
 ## Overview
 
 Threshold encryption allows a message to be encrypted so it can only be decrypted when at least `t` out of `n` participants cooperate. TESS implements this using a **silent setup**, meaning the initial setup does not require interactive communication between participants.
