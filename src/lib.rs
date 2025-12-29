@@ -97,6 +97,9 @@ mod kzg;
 mod sym_enc;
 mod tess;
 
+#[cfg(feature = "std")]
+mod serde_impl;
+
 pub use arith::*;
 pub use errors::*;
 pub use kzg::*;
