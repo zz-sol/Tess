@@ -96,6 +96,60 @@ use crate::{
 #[derive(Debug)]
 pub struct KZG;
 
+impl KZG {
+    fn ensure_unique_points(points: &[Fr]) -> Result<(), BackendError> {
+        for i in 0..points.len() {
+            for j in (i + 1)..points.len() {
+                if points[i] == points[j] {
+                    return Err(BackendError::Math("duplicate points in batch opening"));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn vanishing_polynomial(points: &[Fr]) -> DensePolynomial {
+        let mut poly = DensePolynomial::from_coefficients_vec(vec![Fr::one()]);
+        for point in points {
+            poly = poly.mul_by_linear(*point);
+        }
+        poly
+    }
+
+    fn interpolate_remainder(
+        points: &[Fr],
+        values: &[Fr],
+    ) -> Result<DensePolynomial, BackendError> {
+        if points.len() != values.len() {
+            return Err(BackendError::Math(
+                "batch opening: mismatched points and values",
+            ));
+        }
+
+        Self::ensure_unique_points(points)?;
+
+        let vanishing = Self::vanishing_polynomial(points);
+        let mut remainder = DensePolynomial::from_coefficients_vec(vec![Fr::zero()]);
+
+        for (idx, point) in points.iter().enumerate() {
+            let (numerator, rem) = vanishing.divide_by_linear(*point);
+            if rem != Fr::zero() {
+                return Err(BackendError::Math(
+                    "non-zero remainder in vanishing division",
+                ));
+            }
+            let denom = numerator.evaluate(point);
+            let denom_inv = denom
+                .invert()
+                .ok_or(BackendError::Math("duplicate points in batch opening"))?;
+            let scaled = &numerator * (values[idx] * denom_inv);
+            remainder = remainder + scaled;
+        }
+
+        Ok(remainder)
+    }
+}
+
 /// Structured Reference String (SRS) for KZG commitments.
 ///
 /// The SRS contains precomputed powers of tau in both G1 and G2 groups,
@@ -342,21 +396,23 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
         params: &Self::Parameters,
         polynomial: &Self::Polynomial,
         points: &[B::Scalar],
-    ) -> Result<(Vec<B::Scalar>, Vec<B::G1>), BackendError> {
+    ) -> Result<(Vec<B::Scalar>, B::G1), BackendError> {
         if points.is_empty() {
-            return Ok((Vec::new(), Vec::new()));
+            return Ok((Vec::new(), B::G1::identity()));
         }
 
         let mut values = Vec::with_capacity(points.len());
-        let mut proofs = Vec::with_capacity(points.len());
-
         for point in points {
-            let (value, proof) = Self::open_g1(params, polynomial, point)?;
-            values.push(value);
-            proofs.push(proof);
+            values.push(polynomial.evaluate(point));
         }
 
-        Ok((values, proofs))
+        let remainder = Self::interpolate_remainder(points, &values)?;
+        let vanishing = Self::vanishing_polynomial(points);
+        let diff = polynomial.clone() - remainder;
+        let quotient = &diff / &vanishing;
+        let proof = Self::commit_g1(params, &quotient)?;
+
+        Ok((values, proof))
     }
 
     fn batch_verify_g1(
@@ -364,43 +420,34 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
         commitment: &B::G1,
         points: &[B::Scalar],
         values: &[B::Scalar],
-        proofs: &[B::G1],
+        proof: &B::G1,
     ) -> Result<bool, BackendError> {
-        if points.len() != values.len() || points.len() != proofs.len() {
-            return Err(BackendError::Math("batch verify: mismatched array lengths"));
+        if points.len() != values.len() {
+            return Err(BackendError::Math(
+                "batch verify: mismatched points and values",
+            ));
         }
 
         if points.is_empty() {
             return Ok(true);
         }
 
-        if params.powers_of_h.len() < 2 {
+        if params.powers_of_h.is_empty() {
             return Err(BackendError::Math("insufficient SRS powers"));
         }
 
-        let g = B::G1::generator();
         let h = params.powers_of_h[0];
-        let h_tau = params.powers_of_h[1];
 
-        // Batch verify using multi-pairing
-        // For each i: e(C - g*v_i, h) == e(π_i, h*τ - h*z_i)
-        // Aggregate as: ∏ e(C - g*v_i, h) * e(-π_i, h*τ - h*z_i) == 1
+        let remainder = Self::interpolate_remainder(points, values)?;
+        let vanishing = Self::vanishing_polynomial(points);
+        let remainder_commitment = Self::commit_g1(params, &remainder)?;
+        let vanishing_commitment = Self::commit_g2(params, &vanishing)?;
 
-        let mut g1_points = Vec::with_capacity(points.len() * 2);
-        let mut g2_points = Vec::with_capacity(points.len() * 2);
+        let lhs = commitment.sub(&remainder_commitment);
+        let neg_proof = proof.negate();
 
-        for i in 0..points.len() {
-            // Add e(C - g*v_i, h)
-            g1_points.push(commitment.sub(&g.mul_scalar(&values[i])));
-            g2_points.push(h);
-
-            // Add e(-π_i, h*τ - h*z_i)
-            g1_points.push(proofs[i].negate());
-            g2_points.push(h_tau.sub(&h.mul_scalar(&points[i])));
-        }
-
-        let result = B::multi_pairing(&g1_points, &g2_points)?;
-        Ok(result == <B::Target as TargetGroup>::identity())
+        let result = B::multi_pairing(&[lhs, neg_proof], &[h, vanishing_commitment])?;
+        return Ok(result == <B::Target as TargetGroup>::identity());
     }
 }
 

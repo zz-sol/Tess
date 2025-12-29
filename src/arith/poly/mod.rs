@@ -168,6 +168,29 @@ impl<F: FieldArithmetic> DensePolynomialGeneric<F> {
         DensePolynomialGeneric::from_coefficients_vec(result)
     }
 
+    /// Multiply by a linear factor (x - root) in O(n).
+    pub fn mul_by_linear(&self, root: F) -> DensePolynomialGeneric<F> {
+        if self.coeffs.len() == 1 && self.coeffs[0] == F::zero() {
+            return DensePolynomialGeneric::zero();
+        }
+
+        let neg_root = F::zero() - root;
+        let mut result = vec![F::zero(); self.coeffs.len() + 1];
+
+        result[0] = self.coeffs[0] * neg_root;
+        for (i, res) in result
+            .iter_mut()
+            .enumerate()
+            .take(self.coeffs.len())
+            .skip(1)
+        {
+            *res = self.coeffs[i - 1] + (self.coeffs[i] * neg_root);
+        }
+        result[self.coeffs.len()] = *self.coeffs.last().unwrap();
+
+        DensePolynomialGeneric::from_coefficients_vec(result)
+    }
+
     /// Synthetic division by (x - root).
     pub fn divide_by_linear(&self, root: F) -> (DensePolynomialGeneric<F>, F) {
         assert!(self.coeffs.len() > 1, "cannot divide constant polynomial");
@@ -559,6 +582,20 @@ mod tests {
         let naive = a.naive_mul(&b);
         let fft = a.fft_mul(&b);
         assert_eq!(naive, fft);
+    }
+
+    #[test]
+    fn mul_by_linear_matches_naive() {
+        let poly = DensePolynomial::from_coefficients_vec(vec![
+            Fr::from_u64(2),
+            Fr::from_u64(5),
+            Fr::from_u64(7),
+        ]);
+        let root = Fr::from_u64(3);
+        let factor = DensePolynomial::from_coefficients_vec(vec![Fr::zero() - root, Fr::one()]);
+        let naive = poly.naive_mul(&factor);
+        let optimized = poly.mul_by_linear(root);
+        assert_eq!(naive, optimized);
     }
 
     #[test]

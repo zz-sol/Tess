@@ -75,7 +75,7 @@ pub trait PolynomialCommitment<B: PairingBackend>: Send + Sync + Debug + 'static
         proof: &B::G1,
     ) -> Result<bool, BackendError>;
 
-    /// Opens a commitment at multiple points in G1, returning evaluations and proofs.
+    /// Opens a commitment at multiple points in G1, returning evaluations and a proof.
     ///
     /// This is more efficient than calling `open_g1` multiple times for the same polynomial.
     #[allow(clippy::type_complexity)]
@@ -83,7 +83,7 @@ pub trait PolynomialCommitment<B: PairingBackend>: Send + Sync + Debug + 'static
         params: &Self::Parameters,
         polynomial: &Self::Polynomial,
         points: &[B::Scalar],
-    ) -> Result<(Vec<B::Scalar>, Vec<B::G1>), BackendError>;
+    ) -> Result<(Vec<B::Scalar>, B::G1), BackendError>;
 
     /// Verifies multiple commitment openings in G1 for the same commitment.
     ///
@@ -93,7 +93,7 @@ pub trait PolynomialCommitment<B: PairingBackend>: Send + Sync + Debug + 'static
         commitment: &B::G1,
         points: &[B::Scalar],
         values: &[B::Scalar],
-        proofs: &[B::G1],
+        proof: &B::G1,
     ) -> Result<bool, BackendError>;
 }
 
@@ -153,17 +153,10 @@ mod tests {
 
         // Test batch opening at multiple points
         let points = vec![Fr::from_u64(1), Fr::from_u64(2), Fr::from_u64(3)];
-        let (values, proofs) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
-
-        // Verify individual openings
-        for i in 0..points.len() {
-            let ok = KZG::verify_g1(&params, &commitment, &points[i], &values[i], &proofs[i])
-                .expect("verify");
-            assert!(ok, "individual proof {} should verify", i);
-        }
+        let (values, proof) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
 
         // Verify batch
-        let ok = KZG::batch_verify_g1(&params, &commitment, &points, &values, &proofs)
+        let ok = KZG::batch_verify_g1(&params, &commitment, &points, &values, &proof)
             .expect("batch verify");
         assert!(ok, "batch proof should verify");
     }
@@ -179,13 +172,13 @@ mod tests {
         let commitment = KZG::commit_g1(&params, &poly).expect("commit");
 
         let points = vec![Fr::from_u64(1), Fr::from_u64(2), Fr::from_u64(3)];
-        let (mut values, proofs) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
+        let (mut values, proof) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
 
         // Tamper with one value
         values[1] = Fr::random(&mut rng);
 
         // Batch verification should fail
-        let ok = KZG::batch_verify_g1(&params, &commitment, &points, &values, &proofs)
+        let ok = KZG::batch_verify_g1(&params, &commitment, &points, &values, &proof)
             .expect("batch verify");
         assert!(!ok, "batch proof should not verify with tampered value");
     }
@@ -241,11 +234,14 @@ mod tests {
 
         // Empty batch
         let points: Vec<Fr> = vec![];
-        let (values, proofs) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
+        let (values, proof) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
         assert!(values.is_empty(), "empty batch should return empty values");
-        assert!(proofs.is_empty(), "empty batch should return empty proofs");
+        assert!(
+            proof.is_identity(),
+            "empty batch should return identity proof"
+        );
 
-        let ok = KZG::batch_verify_g1(&params, &commitment, &points, &values, &proofs)
+        let ok = KZG::batch_verify_g1(&params, &commitment, &points, &values, &proof)
             .expect("batch verify");
         assert!(ok, "empty batch should verify successfully");
     }
@@ -262,16 +258,20 @@ mod tests {
 
         // Single point batch
         let points = vec![Fr::from_u64(7)];
-        let (values, proofs) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
+        let (values, proof) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
 
         // Should match individual opening
-        let (value_single, _proof_single) = KZG::open_g1(&params, &poly, &points[0]).expect("open");
+        let (value_single, proof_single) = KZG::open_g1(&params, &poly, &points[0]).expect("open");
         assert_eq!(
             values[0], value_single,
             "batch and single opening should match"
         );
+        assert_eq!(
+            proof, proof_single,
+            "single-point batch proof should match individual proof"
+        );
 
-        let ok = KZG::batch_verify_g1(&params, &commitment, &points, &values, &proofs)
+        let ok = KZG::batch_verify_g1(&params, &commitment, &points, &values, &proof)
             .expect("batch verify");
         assert!(ok, "single point batch should verify");
     }
@@ -329,11 +329,11 @@ mod tests {
         let commitment = KZG::commit_g1(&params, &poly).expect("commit");
 
         let points = vec![Fr::from_u64(1), Fr::from_u64(2), Fr::from_u64(3)];
-        let (values, proofs) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
+        let (values, proof) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
 
         // Mismatched lengths should return error
         let short_values = vec![values[0], values[1]];
-        let result = KZG::batch_verify_g1(&params, &commitment, &points, &short_values, &proofs);
+        let result = KZG::batch_verify_g1(&params, &commitment, &points, &short_values, &proof);
         assert!(result.is_err(), "should error on mismatched array lengths");
     }
 
@@ -395,13 +395,13 @@ mod tests {
             Fr::from_u64(3),
             Fr::from_u64(4),
         ];
-        let (mut values, proofs) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
+        let (mut values, proof) = KZG::batch_open_g1(&params, &poly, &points).expect("batch open");
 
         // Tamper with multiple values
         values[0] = Fr::random(&mut rng);
         values[2] = Fr::random(&mut rng);
 
-        let ok = KZG::batch_verify_g1(&params, &commitment, &points, &values, &proofs)
+        let ok = KZG::batch_verify_g1(&params, &commitment, &points, &values, &proof)
             .expect("batch verify");
         assert!(
             !ok,
