@@ -447,7 +447,7 @@ impl<B: PairingBackend<Scalar = Fr>> PolynomialCommitment<B> for KZG {
         let neg_proof = proof.negate();
 
         let result = B::multi_pairing(&[lhs, neg_proof], &[h, vanishing_commitment])?;
-        return Ok(result == <B::Target as TargetGroup>::identity());
+        Ok(result == <B::Target as TargetGroup>::identity())
     }
 }
 
